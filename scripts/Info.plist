@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleName</key><string>Prism</string>
+    <key>CFBundleDisplayName</key><string>Prism</string>
+    <key>CFBundleIdentifier</key><string>com.prism.screenstudio</string>
+    <key>CFBundleExecutable</key><string>Prism</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>2.1.0</string>
+    <key>CFBundleVersion</key><string>3</string>
+    <key>LSMinimumSystemVersion</key><string>15.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSMicrophoneUsageDescription</key><string>Prism uses your microphone to add your narration to recordings you start.</string>
+    <key>NSCameraUsageDescription</key><string>Prism uses your camera to add an optional presenter bubble to recordings you start.</string>
+    <key>NSAudioCaptureUsageDescription</key><string>Prism records audio from your Mac when you enable system audio.</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+</dict></plist>
