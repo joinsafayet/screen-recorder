@@ -189,12 +189,17 @@ struct SourcePreview: View {
 }
 
 struct CaptureSourcePicker: View {
+    @ViewState<Bool> private var savingRegion = false
+    @ViewState<String> private var regionName = ""
     @EnvironmentObject private var model: AppModel
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: model.settings.mode.icon).foregroundStyle(Color.accent)
-                if model.settings.mode == .window {
+                if model.pickedFilter != nil {
+                    Text(model.pickedSourceName).font(.system(size: 12)).lineLimit(1)
+                    Button("Clear") { model.pickedFilter = nil; Task { await model.refreshPreview() } }.buttonStyle(QuietButton())
+                } else if model.settings.mode == .window {
                     Picker("Window", selection: $model.windowID) {
                         if model.windows.isEmpty { Text("No windows available").tag(Optional<CGWindowID>.none) }
                         ForEach(model.windows, id: \.windowID) { window in Text("\(window.owningApplication?.applicationName ?? "App") — \(window.title ?? "Untitled")").tag(Optional(window.windowID)) }
@@ -212,7 +217,23 @@ struct CaptureSourcePicker: View {
                     Chip(title: model.settings.quality == .original ? "NATIVE" : "≤ \(model.settings.quality.maxHeight)p", color: .accent)
                 }
             }
+            HStack(spacing: 10) {
+                Button { model.chooseSystemSource() } label: { Label("Choose with macOS", systemImage: "macwindow.badge.plus") }.buttonStyle(QuietButton())
+                if model.settings.mode == .region {
+                    Picker("Aspect", selection: $model.regionAspect) { ForEach(CaptureAspect.allCases) { Text($0.rawValue).tag($0) } }.frame(width: 100)
+                    Menu("Saved areas") {
+                        ForEach(model.savedRegions) { saved in Button(saved.name) { model.restoreRegion(saved) } }
+                        Button("Save current area…") { regionName = "My capture area"; savingRegion = true }.disabled(model.region == nil)
+                        if !model.savedRegions.isEmpty { Divider(); Button("Remove saved areas", role: .destructive) { model.savedRegions = [] } }
+                    }.font(.system(size: 11))
+                }
+            }
             if model.settings.mode == .window && model.windows.isEmpty { Text("Refresh sources after granting screen access.").font(.system(size: 10)).foregroundStyle(Color.muted) }
+        }
+        .alert("Save capture area", isPresented: $savingRegion) {
+            TextField("Area name", text: $regionName)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { model.saveCurrentRegion(name: regionName) }
         }
     }
 }
@@ -242,9 +263,9 @@ struct RecordDock: View {
                 Button("Cancel countdown") { model.cancelCountdown() }.buttonStyle(QuietButton())
             } else {
                 Button {
-                    if model.screenAccess { model.startRecording() } else { Task { await model.requestScreenAccess() } }
+                    if model.canCapture { model.startRecording() } else { Task { await model.requestScreenAccess() } }
                 } label: {
-                    HStack(spacing: 12) { Image(systemName: "record.circle"); Text(model.screenAccess ? "Start recording" : "Set up recording"); if model.screenAccess { Text("⌘ ⇧ R").font(.system(size: 10)).opacity(0.7) } }
+                    HStack(spacing: 12) { Image(systemName: "record.circle"); Text(model.canCapture ? "Start recording" : "Set up recording"); if model.canCapture { Text("⌘ ⇧ R").font(.system(size: 10)).opacity(0.7) } }
                 }.buttonStyle(PrimaryButton()).disabled(model.phase.isActive || library.isBusy)
             }
         }.card(padding: 18)

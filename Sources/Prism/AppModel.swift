@@ -9,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published var settings: CaptureSettings {
         didSet {
             if let data = try? JSONEncoder().encode(settings) { UserDefaults.standard.set(data, forKey: "captureSettings") }
+            if oldValue.mode != settings.mode { pickedFilter = nil }
             if oldValue.mode != settings.mode || oldValue.showCursor != settings.showCursor { schedulePreview() }
         }
     }
@@ -28,11 +29,18 @@ final class AppModel: ObservableObject {
     @Published var displays: [SCDisplay] = []
     @Published var windows: [SCWindow] = []
     @Published var displayID: CGDirectDisplayID = CGMainDisplayID() {
-        didSet { if oldValue != displayID { region = nil; schedulePreview() } }
+        didSet { if oldValue != displayID { pickedFilter = nil; region = nil; schedulePreview() } }
     }
     @Published var windowID: CGWindowID? {
-        didSet { if oldValue != windowID { schedulePreview() } }
+        didSet { if oldValue != windowID { pickedFilter = nil; schedulePreview() } }
     }
+    @Published var regionAspect: CaptureAspect = .free
+    @Published var savedRegions: [SavedRegion] = [] {
+        didSet { if let data = try? JSONEncoder().encode(savedRegions) { UserDefaults.standard.set(data, forKey: "savedRegions") } }
+    }
+    @Published var pickedFilter: SCContentFilter?
+    @Published var pickedSourceName = "System-selected source"
+    var canCapture: Bool { screenAccess || pickedFilter != nil }
     @Published var region: CGRect?
     @Published var preview: NSImage?
     @Published var loadingPreview = false
@@ -71,6 +79,7 @@ final class AppModel: ObservableObject {
     init(library: LibraryStore? = nil, discoverSources: Bool = true) {
         self.library = library ?? LibraryStore()
         settings = UserDefaults.standard.data(forKey: "captureSettings").flatMap { try? JSONDecoder().decode(CaptureSettings.self, from: $0) } ?? CaptureSettings()
+        savedRegions = UserDefaults.standard.data(forKey: "savedRegions").flatMap { try? JSONDecoder().decode([SavedRegion].self, from: $0) } ?? []
         configureHotkeys()
         refreshPermissions()
         if screenAccess && discoverSources { Task { await refreshSources() } }
@@ -82,6 +91,7 @@ final class AppModel: ObservableObject {
     var selectedDisplay: SCDisplay? { displays.first { $0.displayID == displayID } ?? displays.first }
     var selectedWindow: SCWindow? { windows.first { $0.windowID == windowID } }
     var sourceName: String {
+        if pickedFilter != nil { return pickedSourceName }
         if settings.mode == .window { return selectedWindow?.title ?? "Choose a window" }
         if settings.mode == .region, let region { return "\(Int(region.width)) × \(Int(region.height)) area" }
         return displayName
@@ -149,6 +159,7 @@ final class AppModel: ObservableObject {
     private func makeFilter() async throws -> (SCContentFilter, SCDisplay?, CGSize) {
         // Snapshot the selection before awaiting shareable content. A later click
         // must not combine an old filter with a new mode or region.
+        if let pickedFilter { return (pickedFilter, nil, pickedFilter.contentRect.size) }
         let mode = settings.mode
         let region = region
         let display = selectedDisplay
@@ -171,7 +182,7 @@ final class AppModel: ObservableObject {
     private func schedulePreview() {
         previewTask?.cancel()
         previewRequest = UUID(); preview = nil; loadingPreview = false
-        guard screenAccess, !phase.isActive else { return }
+        guard canCapture, !phase.isActive else { return }
         previewTask = Task { [weak self] in
             do { try await Task.sleep(for: .milliseconds(90)) } catch { return }
             guard let self, !Task.isCancelled else { return }
@@ -180,7 +191,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshPreview() async {
-        guard screenAccess, !phase.isActive else { return }
+        guard canCapture, !phase.isActive else { return }
         let request = UUID(); previewRequest = request
         let mode = settings.mode, region = region, showsCursor = settings.showCursor
         preview = nil; loadingPreview = true
@@ -201,10 +212,34 @@ final class AppModel: ObservableObject {
         guard !phase.isActive else { return }
         guard let screen = NSScreen.screens.first(where: { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == displayID }) else { return }
         let selectedDisplayID = displayID
-        RegionSelector.shared.select(on: screen) { [weak self] rect in
+        RegionSelector.shared.select(on: screen, initial: region, aspect: regionAspect) { [weak self] rect in
             guard let self, let rect, !self.phase.isActive, self.displayID == selectedDisplayID, self.settings.mode == .region else { return }
             self.region = rect; self.schedulePreview()
         }
+    }
+
+    func chooseSystemSource() {
+        guard !phase.isActive else { return }
+        NativeSourcePicker.shared.present { [weak self] result in
+            guard let self, !self.phase.isActive, let result else { return }
+            switch result {
+            case .success(let filter):
+                self.settings.mode = filter.style == .window ? .window : .display
+                self.pickedFilter = filter; self.region = nil
+                if #available(macOS 15.2, *) { self.pickedSourceName = filter.includedWindows.first?.title ?? filter.includedDisplays.first.map { "Display \($0.displayID)" } ?? "Selected source" }
+                self.schedulePreview()
+            case .failure(let error): self.error = error.localizedDescription
+            }
+        }
+    }
+    func saveCurrentRegion(name: String) {
+        guard let region, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        savedRegions.append(SavedRegion(name: name, displayID: displayID, rect: region))
+    }
+    func restoreRegion(_ saved: SavedRegion) {
+        guard !phase.isActive, let screen = NSScreen.screens.first(where: { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == saved.displayID }) else { error = "The saved area’s display is not connected."; return }
+        displayID = saved.displayID; settings.mode = .region
+        region = RegionGeometry.fit(saved.rect, in: CGRect(origin: .zero, size: screen.frame.size), aspect: regionAspect); schedulePreview()
     }
 
     func startRecording() {
@@ -215,7 +250,7 @@ final class AppModel: ObservableObject {
             phase = .preparing
             do {
                 refreshPermissions()
-                guard screenAccess else { throw PrismError.message("Allow Screen Recording access first. You can do this in Preferences → Permissions.") }
+                guard canCapture else { throw PrismError.message("Allow Screen Recording access first. You can do this in Preferences → Permissions.") }
                 if settings.microphone, !microphoneAccess {
                     microphoneAccess = await AVCaptureDevice.requestAccess(for: .audio)
                     guard microphoneAccess else { throw PrismError.message("Microphone access is needed for your selected audio setup.") }

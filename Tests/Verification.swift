@@ -293,6 +293,7 @@ func unwrap<T>(_ value: T?) throws -> T {
             ("Region coordinate conversion", { suite.testRegionCoordinatesRespectDisplayOrigin() }),
             ("Area selection direction and screen-edge bounds", { suite.testAreaSelectionClampsAndSupportsEveryDragDirection() }),
             ("Area selection retry, release position, and cancellation", { suite.testRegionSelectionRetriesSmallDragsAndUsesFinalMouseUp() }),
+            ("Adjustable regions and saved area persistence", { try suite.testAdjustableRegionsAndSavedAreas() }),
             ("Preset selection and effective codec", { suite.testPresetSelectionUsesEffectiveCodecAndPreservesOtherOptions() }),
             ("Duration formatting", { suite.testClockHandlesLongAndNegativeDurations() }),
             ("Pause removal and static-screen tail", { try await suite.testVideoWriterRemovesPauseAndRetainsStaticTail() }),
