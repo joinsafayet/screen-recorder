@@ -309,6 +309,8 @@ func unwrap<T>(_ value: T?) throws -> T {
             ("Preparation output estimates and audio activity", { suite.testPreparationEstimatesAndAudioMeter() }),
             ("Recovery journal ordering and path validation", { try await suite.testRecoveryJournalOrderingAndPathValidation() }),
             ("Interrupted fragment playback and restoration", { try await suite.testInterruptedFragmentIsPlayableAndRecoverable() }),
+            ("Timeline history, crop geometry, and validation", { try suite.testTimelineHistoryGeometryAndValidation() }),
+            ("Timeline cuts, crop export, persistence, and cancellation", { try await suite.testTimelineExportCutsCropAndEditPersistence() }),
             ("Duration formatting", { suite.testClockHandlesLongAndNegativeDurations() }),
             ("Pause removal and static-screen tail", { try await suite.testVideoWriterRemovesPauseAndRetainsStaticTail() }),
             ("Empty recording failure", { try await suite.testEmptyWriterReportsFailureInsteadOfSavingBrokenVideo() }),

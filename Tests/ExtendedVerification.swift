@@ -80,3 +80,55 @@ extension Verification {
         expect(remaining.isEmpty)
     }
 }
+
+extension Verification {
+    @MainActor func testTimelineHistoryGeometryAndValidation() throws {
+        let id = UUID(); let history = TimelineHistory(TimelineDocument(recordingID: id, duration: 10))
+        history.change { _ = $0.split(at: 4) }
+        expect(history.document.cuts.count == 2 && history.document.duration == 10)
+        history.change { $0.cuts.removeFirst() }
+        expect(history.document.duration == 6 && history.document.sourceTime(at: 1) == 5)
+        history.undo(); expect(history.document.cuts.count == 2)
+        history.undo(); expect(history.document.cuts.count == 1)
+        history.redo(); expect(history.document.cuts.count == 2)
+        let crop = TimelineGeometry.cropRect(source: CGSize(width: 1920, height: 1080), normalized: CGRect(x: 0, y: 0, width: 1, height: 1), aspect: .portrait)
+        expect(abs(crop.width / crop.height - 9 / 16) < 0.001)
+        var document = history.document; document.zooms = [ZoomKeyframe(time: 0, scale: 1), ZoomKeyframe(time: 4, scale: 3)]
+        expect(abs(document.zoom(at: 2).scale - 2) < 0.001)
+        try document.validate(sourceDuration: 10)
+        document.cuts[0].end = 100
+        do { try document.validate(sourceDuration: 10); expect(false, "Reject ranges outside the original") } catch {}
+    }
+    @MainActor func testTimelineExportCutsCropAndEditPersistence() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("prism-timeline-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = folder.appendingPathComponent("source.mp4"), target = folder.appendingPathComponent("edited.mov")
+        var settings = CaptureSettings(); settings.systemAudio = false
+        let writer = try RecordingWriter(url: source, size: (320, 180), settings: settings)
+        for i in 0..<60 { writer.consume(try frame(at: 10 + Double(i) / 20), type: .screen); try await Task.sleep(for: .milliseconds(3)) }
+        try await writer.finish(activeDuration: 3)
+        let original = try Data(contentsOf: source)
+        let library = LibraryStore(folder: folder, support: folder.appendingPathComponent("Index"))
+        let recording = try await library.add(url: source, source: "Fixture", fps: 20)
+        var document = TimelineDocument(recordingID: recording.id, duration: recording.duration)
+        document.cuts = [TimelineCut(start: 0.2, end: 0.7), TimelineCut(start: 1.5, end: 2.2)]
+        document.aspect = .square; document.zooms = [ZoomKeyframe(time: 0, scale: 1.2)]
+        try await library.saveEdits(recording, document: document)
+        let restored = try await library.loadEdits(recording); expect(restored == document)
+        try await TimelineRenderer.export(source: source, target: target, document: document, format: .mov)
+        let asset = AVURLAsset(url: target)
+        let duration = try await asset.load(.duration).seconds
+        expect(abs(duration - 1.2) < 0.1)
+        let track = try await asset.loadTracks(withMediaType: .video)[0]
+        let size = try await track.load(.naturalSize); expect(size == CGSize(width: 180, height: 180))
+        let generator = AVAssetImageGenerator(asset: asset)
+        let image = try await generator.image(at: CMTime(seconds: 0.3, preferredTimescale: 600)).image
+        expect(image.width == 180 && image.height == 180)
+        let after = try Data(contentsOf: source); expect(after == original)
+        let unchanged = try Data(contentsOf: target)
+        let task = Task { try await TimelineRenderer.export(source: source, target: target, document: document, format: .mov) }
+        task.cancel(); do { try await task.value; expect(false, "Cancelled edits must not replace a destination") } catch {}
+        let afterCancel = try Data(contentsOf: target); expect(afterCancel == unchanged)
+    }
+}

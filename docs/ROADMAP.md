@@ -6,7 +6,7 @@ Each phase is committed independently. Source originals and local recording data
 2. [x] Selection: native source picker; adjustable, constrained, saved recording regions.
 3. [x] Preparation: actual camera/audio preview, test takes, storage/output estimates.
 4. [x] Recovery: interrupted-session journal, recoverable movie fragments, background disk checks.
-5. Timeline: multiple cuts, crop/aspect, zoom keyframes, audio fades, undo/redo, saved edits.
+5. [x] Timeline: multiple cuts, crop/aspect, zoom keyframes, audio fades, undo/redo, saved edits.
 6. Presentation: editable drawings/arrows, keystroke capture, spotlight, local caption workflow.
 7. Library/export: projects, tags, batch actions, persistent export queue, output presets.
 8. Validation: long capture and interruption tests, UI stress, theme/focus polish, package checks.
@@ -16,3 +16,4 @@ Permission-dependent features are opt-in. Media tests use temporary folders and 
 Phase 2 validation: 17 functional/media checks passed, including region handles, screen-edge bounds, aspect constraints, and saved area persistence.
 Phase 3 validation: 18 media and functional checks passed. Device meters use actual buffers; preview images are limited to 2 fps. Physical device permission checks remain manual.
 Phase 4 validation: 20 checks passed. An abrupt-exit fixture produced an unfinalized movie whose completed fragment decoded and recovered into the library with its title and valid markers.
+Phase 5 validation: 22 checks passed, including actual multi-cut square exports, unchanged source bytes, cancellation preserving a destination, saved edits, and undo/redo. The preview factory uses the asynchronous AVFoundation API.

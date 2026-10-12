@@ -96,7 +96,7 @@ struct LibraryView: View {
                 .animation(PrismMotion.selection(reduceMotion), value: model.librarySort)
         }
         .onChange(of: model.destination) { _, destination in if destination != .library { selected = nil; renaming = nil; deleting = nil } }
-        .sheet(item: $selected) { recording in RecordingDetail(recording: recording).environmentObject(model).environmentObject(library).preferredColorScheme(model.colorScheme) }
+        .sheet(item: $selected) { recording in TimelineEditor(recording: recording).environmentObject(model).environmentObject(library).preferredColorScheme(model.colorScheme) }
         .alert("Rename recording", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Recording name", text: $renameTitle)
             Button("Cancel", role: .cancel) { renaming = nil }
@@ -109,100 +109,8 @@ struct LibraryView: View {
     }
 }
 
-struct RecordingDetail: View {
-    let recording: Recording
-    @EnvironmentObject private var model: AppModel
-    @EnvironmentObject private var library: LibraryStore
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.prismReduceMotion) private var reduceMotion
-    @ViewState<AVPlayer> private var player = AVPlayer()
-    @ViewState<Double> private var start = 0.0
-    @ViewState<Double> private var end = 0.0
-    @ViewState<Bool> private var trimming = false
-    @ViewState<Bool> private var exporting = false
-    @ViewState<VideoFormat> private var format = .mp4
-    @ViewState<String?> private var localError = nil
-    @ViewState<ExportQuality> private var quality = .original
-    @ViewState<Float> private var exportProgress = 0
-    @ViewState<Task<Void, Never>?> private var exportTask = nil
-    private var minimumGap: Double { min(0.1, recording.duration / 2) }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(recording.title).font(.system(size: 19, weight: .semibold)).lineLimit(1)
-                    Text("\(recording.source) · \(recording.width) × \(recording.height) · \(recording.bytes.fileSize)").font(.system(size: 11)).foregroundStyle(Color.muted)
-                }
-                Spacer()
-                Button { player.pause(); dismiss() } label: { Image(systemName: "xmark").frame(width: 18, height: 18) }.buttonStyle(QuietButton()).disabled(exporting)
-            }
-            NativeVideoPlayer(player: player).frame(height: 340).clipShape(RoundedRectangle(cornerRadius: 12)).transaction { $0.animation = nil }
-            if let markers = recording.markers, !markers.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(markers) { marker in
-                            Button { player.seek(to: CMTime(seconds: marker.time, preferredTimescale: 600)) } label: {
-                                Label("\(marker.title) · \(RecordingMath.clock(marker.time))", systemImage: "bookmark").font(.system(size: 10))
-                            }.buttonStyle(QuietButton())
-                        }
-                        Button { do { try library.exportMarkers(recording) } catch { localError = error.localizedDescription } } label: { Image(systemName: "square.and.arrow.up") }.buttonStyle(QuietButton()).help("Export markers as CSV")
-                    }
-                }.frame(height: 36)
-            }
-            HStack {
-                Button { trimming.toggle(); player.currentItem?.forwardPlaybackEndTime = trimming ? CMTime(seconds: end, preferredTimescale: 600) : .invalid } label: { Label(trimming ? "Cancel trim" : "Trim recording", systemImage: "scissors") }.buttonStyle(QuietButton()).disabled(exporting)
-                Text(RecordingMath.clock(recording.duration)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.muted)
-                Spacer()
-                Picker("Export quality", selection: $quality) { ForEach(ExportQuality.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 160).disabled(exporting)
-                Text("Export as").font(.system(size: 11)).foregroundStyle(Color.muted)
-                Picker("Export format", selection: $format) { ForEach(VideoFormat.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 85).disabled(exporting)
-            }
-            if trimming {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack { SectionTitle(text: "Keep only what matters"); Spacer(); Text("\(RecordingMath.clock(end - start)) selected").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.accent) }
-                    HStack {
-                        Text("In").font(.system(size: 11)).frame(width: 28, alignment: .leading)
-                        Slider(value: $start, in: 0...max(0.01, end - minimumGap)).onChange(of: start) { _, value in player.seek(to: CMTime(seconds: value, preferredTimescale: 600)) }
-                        TextField("In seconds", value: Binding(get: { start }, set: { start = min(end - minimumGap, max(0, $0)) }), format: .number.precision(.fractionLength(2))).textFieldStyle(.roundedBorder).font(.system(size: 11, design: .monospaced)).frame(width: 70)
-                    }
-                    HStack {
-                        Text("Out").font(.system(size: 11)).frame(width: 28, alignment: .leading)
-                        Slider(value: $end, in: min(recording.duration, start + minimumGap)...recording.duration).onChange(of: end) { _, value in player.seek(to: CMTime(seconds: value, preferredTimescale: 600)); player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: value, preferredTimescale: 600) }
-                        TextField("Out seconds", value: Binding(get: { end }, set: { end = min(recording.duration, max(start + minimumGap, $0)) }), format: .number.precision(.fractionLength(2))).textFieldStyle(.roundedBorder).font(.system(size: 11, design: .monospaced)).frame(width: 70)
-                    }
-                    Button { player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero); player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: end, preferredTimescale: 600); player.play() } label: { Label("Preview selection", systemImage: "play.fill") }.buttonStyle(QuietButton())
-                }.card(padding: 15).disabled(exporting).transition(PrismMotion.reveal(reduceMotion))
-            }
-            HStack {
-                Image(systemName: "doc.on.doc").foregroundStyle(Color.muted)
-                Text("Exports a copy. Your original stays in your library.").font(.system(size: 11)).foregroundStyle(Color.muted)
-                Spacer()
-                if exporting {
-                    VStack(alignment: .leading, spacing: 5) { ProgressView(value: Double(exportProgress)).frame(width: 115); Text("\(Int(exportProgress * 100))% exported").font(.system(size: 9)).foregroundStyle(Color.muted) }
-                    Button("Cancel") { exportTask?.cancel() }.buttonStyle(QuietButton())
-                } else {
-                    ShareLink(item: library.fileURL(recording)) { Image(systemName: "square.and.arrow.up") }.buttonStyle(QuietButton()).help("Share original recording")
-                }
-                Button {
-                    player.pause(); exporting = true; exportProgress = 0
-                    exportTask = Task {
-                        do { try await library.export(recording, range: trimming ? start...end : nil, format: format, quality: quality) { value in Task { @MainActor in exportProgress = value } } }
-                        catch { if !Task.isCancelled { localError = error.localizedDescription } }
-                        exporting = false; exportTask = nil
-                    }
-                } label: { Label(exporting ? "Exporting…" : trimming ? "Export trimmed copy" : "Export recording", systemImage: "square.and.arrow.up") }.buttonStyle(PrimaryButton()).disabled(exporting)
-            }
-        }.padding(26).frame(width: 900).background(Color.canvas).foregroundStyle(Color.ink).tint(.accent)
-        .animation(PrismMotion.selection(reduceMotion), value: trimming)
-        .onAppear { end = recording.duration; player.replaceCurrentItem(with: AVPlayerItem(url: library.fileURL(recording))) }
-        .onDisappear { player.pause(); player.replaceCurrentItem(with: nil) }
-        .alert("Export failed", isPresented: Binding(get: { localError != nil }, set: { if !$0 { localError = nil } })) { Button("OK") { localError = nil } } message: { Text(localError ?? "") }
-        .interactiveDismissDisabled(exporting)
-    }
-}
-
 /// Use AVKit's AppKit player directly, with stable native transport controls.
-private struct NativeVideoPlayer: NSViewRepresentable {
+struct NativeVideoPlayer: NSViewRepresentable {
     let player: AVPlayer
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()

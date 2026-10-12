@@ -198,6 +198,28 @@ final class LibraryStore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([target])
     }
 
+    func loadEdits(_ recording: Recording) async throws -> TimelineDocument? {
+        let url = metadataURL.deletingLastPathComponent().appendingPathComponent("edits-" + recording.id.uuidString + ".json")
+        return try await Task.detached(priority: .utility) {
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+            let document = try JSONDecoder().decode(TimelineDocument.self, from: Data(contentsOf: url))
+            guard document.recordingID == recording.id else { throw PrismError.message("The saved edits belong to another recording.") }
+            try document.validate(sourceDuration: recording.duration); return document
+        }.value
+    }
+    func saveEdits(_ recording: Recording, document: TimelineDocument) async throws {
+        guard document.recordingID == recording.id else { throw PrismError.message("The edit document does not match this recording.") }
+        try document.validate(sourceDuration: recording.duration)
+        let url = metadataURL.deletingLastPathComponent().appendingPathComponent("edits-" + recording.id.uuidString + ".json")
+        try await Task.detached(priority: .utility) { try Task.checkCancellation(); try JSONEncoder().encode(document).write(to: url, options: .atomic) }.value
+    }
+    func exportTimeline(_ recording: Recording, document: TimelineDocument, format: VideoFormat, quality: ExportQuality, progress: @escaping (Float) -> Void) async throws {
+        let panel = NSSavePanel(); panel.allowedContentTypes = format == .mp4 ? [.mpeg4Movie] : [.quickTimeMovie]
+        panel.nameFieldStringValue = recording.title + " — edited." + format.ext
+        guard panel.runModal() == .OK, let target = panel.url else { return }
+        try await TimelineRenderer.export(source: fileURL(recording), target: target, document: document, format: format, quality: quality, progress: progress)
+    }
+
     func exportMarkers(_ recording: Recording) throws {
         let panel = NSSavePanel(); panel.nameFieldStringValue = recording.title + " — markers.csv"; panel.allowedContentTypes = [.commaSeparatedText]
         guard panel.runModal() == .OK, let target = panel.url else { return }
