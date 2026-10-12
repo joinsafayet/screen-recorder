@@ -57,7 +57,8 @@ struct PrismApp: App {
                 }.disabled(model.phase.isActive && !model.phase.isCapturing)
             }
         } label: {
-            Image(systemName: model.phase.isCapturing ? "record.circle.fill" : "record.circle")
+            if model.phase.isCapturing { Image(systemName: "record.circle.fill") }
+            else { Image(nsImage: PrismBrand.statusMark).accessibilityLabel("Prism") }
         }
     }
 }

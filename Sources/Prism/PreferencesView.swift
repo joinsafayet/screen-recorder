@@ -20,7 +20,7 @@ struct PreferencesView: View {
                         permission(icon: "mic", title: "Microphone", detail: "Optional. Add voice and narration to your captures.", granted: model.microphoneAccess) { Task { await model.requestMicrophoneAccess() } }
                         Divider().overlay(Color.line)
                         permission(icon: "person.crop.circle", title: "Camera", detail: "Optional. A circular presenter bubble in your video.", granted: model.cameraAccess) { Task { await model.requestCameraAccess() } }
-                        Button { model.refreshPermissions(); Task { await model.refreshSources() } } label: { Label("Check permissions again", systemImage: "arrow.clockwise") }.buttonStyle(QuietButton())
+                        Button { model.refreshPermissions(); Task { await model.refreshSources() } } label: { PrismLabel("Check permissions again", systemImage: "arrow.clockwise") }.buttonStyle(QuietButton())
                         Text("If access was changed in System Settings, you may need to quit and reopen Prism.").font(.system(size: 10)).foregroundStyle(Color.muted).lineSpacing(3)
                     }.frame(maxWidth: .infinity, alignment: .leading).card()
                     VStack(alignment: .leading, spacing: 20) {
@@ -44,7 +44,7 @@ struct PreferencesView: View {
                         HStack(spacing: 10) {
                             ForEach(AccentPalette.allCases) { palette in
                                 Button { model.accentChoice = palette.rawValue } label: {
-                                    VStack(spacing: 6) { Circle().fill(Color.swatch(palette)).frame(width: 26, height: 26).overlay { if model.accentChoice == palette.rawValue { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.canvas) } }; Text(palette.rawValue).font(.system(size: 9)) }.padding(5).contentShape(Rectangle())
+                                    VStack(spacing: 6) { Circle().fill(Color.swatch(palette)).frame(width: 26, height: 26).overlay { if model.accentChoice == palette.rawValue { PrismIcon("checkmark", size: 11).foregroundStyle(Color.canvas) } }; Text(palette.rawValue).font(.system(size: 9)) }.padding(5).contentShape(Rectangle())
                                 }.buttonStyle(InteractiveButton(radius: 7)).accessibilityLabel("\(palette.rawValue) accent")
                             }
                         }
@@ -59,7 +59,7 @@ struct PreferencesView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     SectionTitle(text: "Save location")
                     HStack(spacing: 15) {
-                        Image(systemName: "folder.fill").font(.system(size: 27, weight: .light)).foregroundStyle(Color.accent)
+                        PrismIcon("folder.fill", size: 27).foregroundStyle(Color.accent)
                         VStack(alignment: .leading, spacing: 5) {
                             Text(library.folder.lastPathComponent).font(.system(size: 13, weight: .semibold))
                             Text(library.folder.path).font(.system(size: 11)).foregroundStyle(Color.muted).textSelection(.enabled)
@@ -101,10 +101,10 @@ struct PreferencesView: View {
     }
     private func permission(icon: String, title: String, detail: String, granted: Bool, action: @escaping () -> Void) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 18)).foregroundStyle(granted ? Color.mint : Color.accent).frame(width: 28)
+            PrismIcon(icon, size: 18).foregroundStyle(granted ? Color.mint : Color.accent).frame(width: 28)
             VStack(alignment: .leading, spacing: 5) { Text(title).font(.system(size: 12, weight: .semibold)); Text(detail).font(.system(size: 10)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true) }
             Spacer(minLength: 5)
-            if granted { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.mint) }
+            if granted { PrismIcon("checkmark.circle.fill", size: 16).foregroundStyle(Color.mint) }
             else { Button("Allow", action: action).buttonStyle(QuietButton()) }
         }
     }

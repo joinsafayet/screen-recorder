@@ -81,6 +81,11 @@ private struct ReviewRoot: View {
         model.theme = "Light"; model.destination = .settings
         try? await Task.sleep(for: .milliseconds(500)); capture("Prism3-render-Light")
         model.theme = "Dark"
+        panel.setContentSize(CGSize(width: 1060, height: 850))
+        for light in [false, true] {
+            panel.contentView = NSHostingView(rootView: BrandIconReview().preferredColorScheme(light ? .light : .dark))
+            try? await Task.sleep(for: .milliseconds(500)); capture(light ? "Prism-brand-icons-Light" : "Prism-brand-icons-Dark")
+        }
         if let recording = model.library.recordings.first {
             panel.setContentSize(CGSize(width: 1060, height: 730))
             panel.contentView = NSHostingView(rootView: TimelineEditor(recording: recording).environmentObject(model).environmentObject(model.library).preferredColorScheme(.dark))
@@ -120,6 +125,36 @@ private struct ReviewRoot: View {
             try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]).write(to: file)
             model.notify("Interaction test complete · 120 changes")
         }
+    }
+}
+private struct BrandIconReview: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 18) {
+                PrismBrandBadge(size: 80)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Prism").font(.system(size: 34, weight: .semibold)).tracking(-0.7)
+                    Text("CAPTURE / EDIT / PRESENT").font(.system(size: 10, weight: .semibold)).tracking(2).foregroundStyle(Color.muted)
+                }
+                Spacer()
+                Text("30 native vectors\n12 / 18 / 28 pt").font(.system(size: 12)).foregroundStyle(Color.muted).multilineTextAlignment(.trailing)
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 6), spacing: 14) {
+                ForEach(PrismGlyph.allCases, id: \.self) { glyph in
+                    VStack(spacing: 15) {
+                        HStack(alignment: .center, spacing: 15) {
+                            ForEach([CGFloat(12), 18, 28], id: \.self) { size in
+                                PrismGlyphShape(glyph: glyph, compact: size < 16)
+                                    .stroke(style: StrokeStyle(lineWidth: max(1.05, min(2.7, size * 1.75 / 24)), lineCap: .round, lineJoin: .round))
+                                    .frame(width: size, height: size)
+                            }
+                        }.foregroundStyle(Color.ink)
+                        Text(glyph.title).font(.system(size: 10, weight: .medium)).foregroundStyle(Color.muted).lineLimit(1)
+                    }.frame(maxWidth: .infinity).frame(height: 84).card(padding: 12)
+                }
+            }
+            Text("Shared geometry · Optical simplification · Monochrome controls · No idle loops").font(.system(size: 11)).foregroundStyle(Color.muted)
+        }.padding(32).frame(width: 1060, height: 850, alignment: .topLeading).background(Color.canvas).foregroundStyle(Color.ink)
     }
 }
 @MainActor enum AppContext { static weak var model: AppModel? }

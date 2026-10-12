@@ -49,3 +49,9 @@ This package uses ad-hoc local signing. Developer ID signing and notarization re
 ## Remaining device checks
 
 The final session's desktop was locked. The long live benchmark reported **SKIP**, not PASS. It can be rerun with `scripts/verify.sh --long-live-benchmark` after unlocking and making screen access available to the terminal host. Native source picker/region GUI interaction, visible tab/button animation, physical microphone/camera capture and unplugging, and local speech/keyboard permission flows still require an unlocked device with the relevant permissions and hardware. Manual captions and their exported timings were checked independently.
+
+## Branding update
+
+The branding update adds the folded P raster mark, an exact-size ICNS pipeline, and 30 native vector glyphs. All 26 functional/media checks passed again (`build/branding-verification.log`). The isolated host rendered and reviewed dark/light icon contact sheets at 12/18/28 points, the compact studio, preferences, library, exports, and editor. It completed the 120-action layout run with 39.63 ms mean mutation/layout time and 73.90 ms maximum while the desktop was locked; this does not measure visible animation FPS.
+
+The package uses bundle build 5. The icon representations retain alpha at exact 16/32/64/128/256/512/1024 dimensions, and the packaged logo matches the source artwork. Full colors and generation prompts are in [the brand guide](../Assets/Brand/README.md). Branding assets load once; vector glyphs add no idle loop.

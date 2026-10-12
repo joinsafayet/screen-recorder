@@ -50,10 +50,10 @@ struct TimelineEditor: View {
                         }
                     timeline
                     HStack(spacing: 8) {
-                        Button { history.change { selectedCut = $0.split(at: playhead) ?? selectedCut } } label: { Label("Split", systemImage: "scissors") }.buttonStyle(QuietButton())
-                        Button { removeSelected() } label: { Image(systemName: "trash") }.buttonStyle(QuietButton()).disabled(history.document.cuts.count <= 1 || selectedIndex == nil)
-                        Button { history.undo() } label: { Image(systemName: "arrow.uturn.backward") }.buttonStyle(QuietButton()).disabled(!history.canUndo)
-                        Button { history.redo() } label: { Image(systemName: "arrow.uturn.forward") }.buttonStyle(QuietButton()).disabled(!history.canRedo)
+                        Button { history.change { selectedCut = $0.split(at: playhead) ?? selectedCut } } label: { PrismLabel("Split", systemImage: "scissors") }.buttonStyle(QuietButton())
+                        Button { removeSelected() } label: { PrismIcon("trash", size: 16) }.buttonStyle(QuietButton()).disabled(history.document.cuts.count <= 1 || selectedIndex == nil)
+                        Button { history.undo() } label: { PrismIcon("arrow.uturn.backward", size: 16) }.buttonStyle(QuietButton()).disabled(!history.canUndo)
+                        Button { history.redo() } label: { PrismIcon("arrow.uturn.forward", size: 16) }.buttonStyle(QuietButton()).disabled(!history.canRedo)
                         Spacer()
                         Text("\(RecordingMath.clock(playhead)) / \(RecordingMath.clock(history.document.duration))").font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.muted)
                     }.disabled(exporting)
@@ -62,7 +62,7 @@ struct TimelineEditor: View {
                             ForEach(markers) { marker in
                                 Button(marker.title) { seekToSource(marker.time) }.buttonStyle(QuietButton())
                             }
-                            Button { do { try library.exportMarkers(recording) } catch { issue = error.localizedDescription } } label: { Image(systemName: "square.and.arrow.up") }.buttonStyle(QuietButton()).help("Export markers as CSV")
+                            Button { do { try library.exportMarkers(recording) } catch { issue = error.localizedDescription } } label: { PrismIcon("square.and.arrow.up", size: 16) }.buttonStyle(QuietButton()).help("Export markers as CSV")
                         } }.frame(height: 34)
                     }
                 }.frame(minWidth: 560).padding(.trailing, 12)
@@ -108,7 +108,7 @@ struct TimelineEditor: View {
                 Text("\(recording.width) × \(recording.height) · \(recording.bytes.fileSize) · Edits save automatically").font(.system(size: 11)).foregroundStyle(Color.muted)
             }
             Spacer()
-            Button { player.pause(); dismiss() } label: { Image(systemName: "xmark").frame(width: 18, height: 18) }.buttonStyle(QuietButton()).disabled(exporting).accessibilityLabel("Close editor")
+            Button { player.pause(); dismiss() } label: { PrismIcon("xmark", size: 16).frame(width: 18, height: 18) }.buttonStyle(QuietButton()).disabled(exporting).accessibilityLabel("Close editor")
         }
     }
     private var timeline: some View {
@@ -119,7 +119,7 @@ struct TimelineEditor: View {
                     ForEach(history.document.cuts) { cut in
                         Button { selectedCut = cut.id; seekToCut(cut.id) } label: {
                             VStack(alignment: .leading, spacing: 5) {
-                                Image(systemName: "film").font(.system(size: 11))
+                                PrismIcon("film", size: 11)
                                 Text(String(format: "%.2f–%.2fs", cut.start, cut.end)).font(.system(size: 9, design: .monospaced)).lineLimit(1)
                             }.frame(maxWidth: .infinity, alignment: .leading).padding(9)
                                 .frame(width: max(30, (geometry.size.width - CGFloat(max(0, history.document.cuts.count - 1)) * 3) * cut.duration / max(0.01, history.document.duration)), height: 52)
@@ -153,7 +153,7 @@ struct TimelineEditor: View {
             Text("Enable cursor spotlight or shortcut capture in the recorder before your next take to collect those events.").font(.system(size: 10)).foregroundStyle(Color.muted)
             ForEach(history.document.annotations) { annotation in
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack { Text(annotation.kind.rawValue); Spacer(); Button { history.change { $0.annotations.removeAll { $0.id == annotation.id } } } label: { Image(systemName: "trash") }.buttonStyle(InteractiveButton(radius: 4)) }
+                    HStack { Text(annotation.kind.rawValue); Spacer(); Button { history.change { $0.annotations.removeAll { $0.id == annotation.id } } } label: { PrismIcon("trash", size: 16) }.buttonStyle(InteractiveButton(radius: 4)) }
                     if annotation.kind == .text {
                         TextField("Text", text: Binding(get: { history.document.annotations.first { $0.id == annotation.id }?.text ?? "" }, set: { value in history.change { if let index = $0.annotations.firstIndex(where: { $0.id == annotation.id }) { $0.annotations[index].text = String(value.prefix(500)) } } })).textFieldStyle(.roundedBorder)
                     }
@@ -169,7 +169,7 @@ struct TimelineEditor: View {
             Picker("Language", selection: $captionLanguage) {
                 ForEach(["en-US", "en-GB", "ja-JP", "bn-BD", "es-ES", "fr-FR", "de-DE", "zh-CN", "ko-KR"], id: \.self) { Text(Locale.current.localizedString(forIdentifier: $0) ?? $0).tag($0) }
             }
-            Button { generateCaptions() } label: { Label(transcribing ? "Transcribing…" : "Generate locally", systemImage: "waveform") }.buttonStyle(QuietButton()).disabled(transcribing || model.phase.isActive)
+            Button { generateCaptions() } label: { PrismLabel(transcribing ? "Transcribing…" : "Generate locally", systemImage: "waveform") }.buttonStyle(QuietButton()).disabled(transcribing || model.phase.isActive)
             if transcribing { ProgressView(value: captionProgress); Button("Cancel transcription") { captionTask?.cancel() }.buttonStyle(QuietButton()) }
             Text("Requires on-device recognition for the selected language. Audio stays on your Mac. Times below refer to the original recording.").font(.system(size: 10)).foregroundStyle(Color.muted)
             Toggle("Show captions", isOn: Binding(get: { history.document.showCaptions }, set: { value in history.change { $0.showCaptions = value } })).toggleStyle(.switch).controlSize(.small)
@@ -180,7 +180,7 @@ struct TimelineEditor: View {
             ForEach(history.document.captions) { cue in
                 VStack(alignment: .leading, spacing: 7) {
                     TextField("Caption", text: Binding(get: { history.document.captions.first { $0.id == cue.id }?.text ?? "" }, set: { value in history.change { if let index = $0.captions.firstIndex(where: { $0.id == cue.id }) { $0.captions[index].text = String(value.prefix(500)) } } })).textFieldStyle(.roundedBorder)
-                    HStack { TextField("Caption in", value: cueTime(cue.id, isEnd: false), format: .number.precision(.fractionLength(2))).frame(width: 65); Text("–"); TextField("Caption out", value: cueTime(cue.id, isEnd: true), format: .number.precision(.fractionLength(2))).frame(width: 65); Spacer(); Button { history.change { $0.captions.removeAll { $0.id == cue.id } } } label: { Image(systemName: "trash") }.buttonStyle(InteractiveButton(radius: 4)) }
+                    HStack { TextField("Caption in", value: cueTime(cue.id, isEnd: false), format: .number.precision(.fractionLength(2))).frame(width: 65); Text("–"); TextField("Caption out", value: cueTime(cue.id, isEnd: true), format: .number.precision(.fractionLength(2))).frame(width: 65); Spacer(); Button { history.change { $0.captions.removeAll { $0.id == cue.id } } } label: { PrismIcon("trash", size: 16) }.buttonStyle(InteractiveButton(radius: 4)) }
                 }.font(.system(size: 11)).card(padding: 10)
             }
         }
@@ -228,7 +228,7 @@ struct TimelineEditor: View {
                     Button("Later") { if let current = selectedIndex, current + 1 < history.document.cuts.count { history.change { $0.cuts.swapAt(current, current + 1) } } }.buttonStyle(QuietButton()).disabled(index + 1 == history.document.cuts.count)
                 }
             } else { Text("Choose a section in the timeline.").foregroundStyle(Color.muted) }
-            Button { history.change { let cut = TimelineCut(start: 0, end: recording.duration); $0.cuts.append(cut); selectedCut = cut.id } } label: { Label("Add source section", systemImage: "plus") }.buttonStyle(QuietButton())
+            Button { history.change { let cut = TimelineCut(start: 0, end: recording.duration); $0.cuts.append(cut); selectedCut = cut.id } } label: { PrismLabel("Add source section", systemImage: "plus") }.buttonStyle(QuietButton())
             Text("Split at the playhead, remove a section, or adjust its exact in/out points. Your original stays intact.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
         }.font(.system(size: 12))
     }
@@ -243,10 +243,10 @@ struct TimelineEditor: View {
             Button("Reset crop") { history.change { $0.crop = CGRect(x: 0, y: 0, width: 1, height: 1); $0.aspect = .free } }.buttonStyle(QuietButton())
             Divider().overlay(Color.line)
             SectionTitle(text: "Zoom keyframes")
-            Button { history.change { $0.zooms.append(ZoomKeyframe(time: min($0.duration, playhead))) } } label: { Label("Add zoom at playhead", systemImage: "plus.magnifyingglass") }.buttonStyle(QuietButton())
+            Button { history.change { $0.zooms.append(ZoomKeyframe(time: min($0.duration, playhead))) } } label: { PrismLabel("Add zoom at playhead", systemImage: "plus.magnifyingglass") }.buttonStyle(QuietButton())
             ForEach(history.document.zooms) { key in
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack { Text(String(format: "At %.2fs", key.time)); Spacer(); Button { history.change { $0.zooms.removeAll { $0.id == key.id } } } label: { Image(systemName: "xmark") }.buttonStyle(InteractiveButton(radius: 4)) }
+                    HStack { Text(String(format: "At %.2fs", key.time)); Spacer(); Button { history.change { $0.zooms.removeAll { $0.id == key.id } } } label: { PrismIcon("xmark", size: 16) }.buttonStyle(InteractiveButton(radius: 4)) }
                     Slider(value: zoomBinding(key.id, \.scale), in: 1...4) { Text("Zoom scale") }
                     Text(String(format: "%.1f×", key.scale)).foregroundStyle(Color.accent)
                     Slider(value: zoomBinding(key.id, \.x), in: 0...1) { Text("Horizontal focus") }
@@ -268,7 +268,7 @@ struct TimelineEditor: View {
     private var footer: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                Label("Your original is preserved", systemImage: "doc.on.doc").font(.system(size: 11)).foregroundStyle(Color.muted)
+                PrismLabel("Your original is preserved", systemImage: "doc.on.doc").font(.system(size: 11)).foregroundStyle(Color.muted)
                 Spacer()
                 Menu("Presets") {
                     ForEach(OutputPreset.allCases) { preset in Button(preset.rawValue) { if let aspect = preset.aspect { history.change { $0.aspect = aspect } }; quality = preset.quality } }
@@ -278,14 +278,14 @@ struct TimelineEditor: View {
                 }.font(.system(size: 11)).disabled(exporting)
                 Picker("Quality", selection: $quality) { ForEach(ExportQuality.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 150).disabled(exporting)
                 Picker("Format", selection: $format) { ForEach(VideoFormat.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 70).disabled(exporting)
-                ShareLink(item: library.fileURL(recording)) { Image(systemName: "square.and.arrow.up") }.buttonStyle(QuietButton()).help("Share original").disabled(exporting)
+                ShareLink(item: library.fileURL(recording)) { PrismIcon("square.and.arrow.up", size: 16) }.buttonStyle(QuietButton()).help("Share original").disabled(exporting)
             }
             HStack(spacing: 12) {
                 Text("Edits save separately · Queue pauses during capture").font(.system(size: 10)).foregroundStyle(Color.muted)
                 Spacer()
                 if exporting { ProgressView(value: Double(progress)).frame(width: 110); Button("Cancel") { exportTask?.cancel() }.buttonStyle(QuietButton()) }
                 Button("Queue edited copy") { queueExport() }.buttonStyle(QuietButton()).disabled(exporting || model.phase.isActive)
-                Button { export() } label: { Label(exporting ? "Exporting…" : "Export edited copy", systemImage: "square.and.arrow.up") }.buttonStyle(PrimaryButton()).disabled(exporting || model.phase.isActive)
+                Button { export() } label: { PrismLabel(exporting ? "Exporting…" : "Export edited copy", systemImage: "square.and.arrow.up") }.buttonStyle(PrimaryButton()).disabled(exporting || model.phase.isActive)
             }
         }
     }

@@ -19,13 +19,13 @@ struct StudioView: View {
                     if !compact { Spacer(minLength: 12) }
                     HStack(spacing: compact ? 8 : 14) {
                     HStack(spacing: 8) {
-                        Image(systemName: "pencil.line").foregroundStyle(Color.muted)
+                        PrismIcon("pencil.line", size: 16).foregroundStyle(Color.muted)
                         TextField("Name this recording…", text: $model.sessionTitle).textFieldStyle(.plain).font(.system(size: 12))
                     }.padding(10).frame(maxWidth: compact ? .infinity : 210).background(Color.surface, in: RoundedRectangle(cornerRadius: 9)).disabled(model.phase.isActive)
-                    Button { Task { await model.refreshSources() } } label: { Image(systemName: "arrow.clockwise").frame(width: 16, height: 16) }
+                    Button { Task { await model.refreshSources() } } label: { PrismIcon("arrow.clockwise", size: 16).frame(width: 16, height: 16) }
                         .buttonStyle(QuietButton()).disabled(model.loadingSources || model.phase.isActive).help("Refresh capture sources")
                     PreparationAction()
-                    Button { if geometry.size.width < 760 { compactInspectorPresented = true } else { inspectorVisible.toggle() } } label: { Image(systemName: "sidebar.right").frame(width: 16, height: 16) }
+                    Button { if geometry.size.width < 760 { compactInspectorPresented = true } else { inspectorVisible.toggle() } } label: { PrismIcon("sidebar.right", size: 16).frame(width: 16, height: 16) }
                         .buttonStyle(QuietButton()).help("Show or hide recording inspector")
                     }
                 }.padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 16)
@@ -58,7 +58,7 @@ struct StudioView: View {
                 CaptureModeSelector().disabled(model.phase.isActive)
                 CaptureSourcePicker().disabled(model.phase.isActive)
                 SourcePreview(height: min(340, max(220, height - 510)))
-                Label(model.pickedFilter?.style == .display ? "Prism hides during capture. Use the menu bar to pause or stop." : "Prism and its controls stay outside your capture.", systemImage: "lock.shield")
+                PrismLabel(model.pickedFilter?.style == .display ? "Prism hides during capture. Use the menu bar to pause or stop." : "Prism and its controls stay outside your capture.", systemImage: "lock.shield")
                     .font(.system(size: 10)).foregroundStyle(Color.muted)
                 PreparationPanel()
                 if model.phase.isCapturing || model.telemetry.statistics.frames > 0 { CaptureMonitor() }
@@ -74,7 +74,7 @@ struct CaptureModeSelector: View {
             ForEach(CaptureMode.allCases) { mode in
                 Button { model.settings.mode = mode } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: mode.icon).font(.system(size: 14))
+                        PrismIcon(mode.icon, size: 14)
                         Text(mode.rawValue).font(.system(size: 11, weight: .semibold)).lineLimit(1)
                     }.foregroundStyle(model.settings.mode == mode ? Color.accent : Color.muted)
                         .frame(maxWidth: .infinity).padding(.vertical, 12).selectionSurface(model.settings.mode == mode, radius: 9)
@@ -95,7 +95,7 @@ struct RecordingInspector: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack { SectionTitle(text: "Recording inspector"); Spacer(); Image(systemName: "slider.horizontal.3").foregroundStyle(Color.muted) }
+                HStack { SectionTitle(text: "Recording inspector"); Spacer(); PrismIcon("slider.horizontal.3", size: 16).foregroundStyle(Color.muted) }
                 DisclosureGroup("Video", isExpanded: $videoExpanded) {
                     VStack(alignment: .leading, spacing: 14) {
                         Picker("Quality", selection: $model.settings.quality) { ForEach(Quality.allCases) { Text($0.description).tag($0) } }.labelsHidden()
@@ -179,12 +179,12 @@ struct SourcePreview: View {
                     }
                 }.clipShape(RoundedRectangle(cornerRadius: 12))
                 VStack(spacing: 13) {
-                    AnimatedSymbol(name: model.screenAccess ? model.settings.mode.icon : "display").font(.system(size: 33, weight: .ultraLight)).foregroundStyle(Color.accent)
+                    AnimatedSymbol(name: model.screenAccess ? model.settings.mode.icon : "display", size: 33).foregroundStyle(Color.accent)
                         .frame(width: 72, height: 64).background(Color.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 17)).overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.accent.opacity(0.18)))
                     Text(model.screenAccess ? "Choose your perspective" : "Your next great take starts here").font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
                     Text(model.screenAccess ? "Select a source below to preview it." : "Allow screen access to see your capture preview.").font(.system(size: 10)).foregroundStyle(.white.opacity(0.5))
                     if !model.screenAccess {
-                        Button { Task { await model.requestScreenAccess() } } label: { Label("Allow screen access", systemImage: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.accent).padding(5) }.buttonStyle(InteractiveButton(radius: 6)).padding(.top, 3)
+                        Button { Task { await model.requestScreenAccess() } } label: { PrismLabel("Allow screen access", systemImage: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.accent).padding(5) }.buttonStyle(InteractiveButton(radius: 6)).padding(.top, 3)
                     } else if model.settings.mode == .region && model.region == nil {
                         Button("Select an area") { model.selectRegion() }.buttonStyle(QuietButton())
                     }
@@ -209,7 +209,7 @@ struct SourcePreview: View {
                     Text("\(model.settings.fps) FPS").font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(.white.opacity(0.7)).padding(8).background(.black.opacity(0.3), in: Capsule())
                 }
                 Spacer()
-                HStack { Spacer(); Image(systemName: model.settings.mode.icon).font(.system(size: 10)); Text(model.sourceName).font(.system(size: 10, weight: .medium)).lineLimit(1) }
+                HStack { Spacer(); PrismIcon(model.settings.mode.icon, size: 10); Text(model.sourceName).font(.system(size: 10, weight: .medium)).lineLimit(1) }
                     .foregroundStyle(.white.opacity(0.8)).padding(8).background(.black.opacity(0.35), in: Capsule()).fixedSize().frame(maxWidth: .infinity, alignment: .trailing)
             }.padding(13)
             if case .countdown(let seconds) = model.phase {
@@ -229,7 +229,7 @@ struct CaptureSourcePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: model.settings.mode.icon).foregroundStyle(Color.accent)
+                PrismIcon(model.settings.mode.icon, size: 16).foregroundStyle(Color.accent)
                 if model.pickedFilter != nil {
                     Text(model.pickedSourceName).font(.system(size: 12)).lineLimit(1)
                     Button("Clear") { model.pickedFilter = nil; Task { await model.refreshPreview() } }.buttonStyle(QuietButton())
@@ -252,7 +252,7 @@ struct CaptureSourcePicker: View {
                 }
             }
             HStack(spacing: 10) {
-                Button { model.chooseSystemSource() } label: { Label("Choose with macOS", systemImage: "macwindow.badge.plus") }.buttonStyle(QuietButton())
+                Button { model.chooseSystemSource() } label: { PrismLabel("Choose with macOS", systemImage: "macwindow.badge.plus") }.buttonStyle(QuietButton())
                 if model.settings.mode == .region {
                     Picker("Aspect", selection: $model.regionAspect) { ForEach(CaptureAspect.allCases) { Text($0.rawValue).tag($0) } }.frame(width: 100)
                     Menu("Saved areas") {
@@ -278,7 +278,7 @@ struct RecordDock: View {
     @EnvironmentObject private var library: LibraryStore
     var body: some View {
         HStack(spacing: 16) {
-            ZStack { Circle().fill(Color.accent.opacity(0.1)); AnimatedSymbol(name: model.phase.isCapturing ? "waveform" : "record.circle").font(.system(size: 20)).foregroundStyle(Color.accent) }.frame(width: 44, height: 44)
+            ZStack { Circle().fill(Color.accent.opacity(0.1)); AnimatedSymbol(name: model.phase.isCapturing ? "waveform" : "record.circle", size: 20).foregroundStyle(Color.accent) }.frame(width: 44, height: 44)
             VStack(alignment: .leading, spacing: 5) {
                 Text(model.phase.isCapturing ? "\(model.phase.label)  ·  \(RecordingMath.clock(telemetry.elapsed))" : model.phase.label).font(.system(size: 13, weight: .semibold)).monospacedDigit()
                 Text(model.phase == .saving ? telemetry.savingMessage : model.phase.isCapturing ? "\(telemetry.markers.count) markers · Capture monitor tracks encoder pressure" : "Saves to \(library.folder.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))")
@@ -287,9 +287,9 @@ struct RecordDock: View {
             Spacer(minLength: 0)
             if model.phase.isCapturing {
                 AudioMeter()
-                Button { model.addMarker() } label: { Image(systemName: "bookmark").frame(width: 20) }.buttonStyle(QuietButton()).help("Add marker · Control Command M")
+                Button { model.addMarker() } label: { PrismIcon("bookmark", size: 16).frame(width: 20) }.buttonStyle(QuietButton()).help("Add marker · Control Command M")
                 Button { model.togglePause() } label: { AnimatedSymbol(name: model.phase == .paused ? "play.fill" : "pause.fill").frame(width: 20) }.buttonStyle(QuietButton())
-                Button { Task { await model.stopRecording() } } label: { Label("Stop & save", systemImage: "stop.fill") }.buttonStyle(PrimaryButton(color: .red))
+                Button { Task { await model.stopRecording() } } label: { PrismLabel("Stop & save", systemImage: "stop.fill") }.buttonStyle(PrimaryButton(color: .red))
             } else if model.phase == .saving {
                 ProgressView().controlSize(.small)
                 Text("Saving your take").font(.system(size: 12)).foregroundStyle(Color.muted)
@@ -299,7 +299,7 @@ struct RecordDock: View {
                 Button {
                     if model.canCapture { model.startRecording() } else { Task { await model.requestScreenAccess() } }
                 } label: {
-                    HStack(spacing: 12) { Image(systemName: "record.circle"); Text(model.canCapture ? "Start recording" : "Set up recording"); if model.canCapture { Text("⌘ ⇧ R").font(.system(size: 10)).opacity(0.7) } }
+                    HStack(spacing: 12) { PrismIcon("record.circle", size: 16); Text(model.canCapture ? "Start recording" : "Set up recording"); if model.canCapture { Text("⌘ ⇧ R").font(.system(size: 10)).opacity(0.7) } }
                 }.buttonStyle(PrimaryButton()).disabled(model.phase.isActive || library.isBusy || model.editorExporting)
             }
         }.card(padding: 18)
@@ -310,7 +310,7 @@ private struct Tip: View {
     let icon: String, title: String, text: String
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).font(.system(size: 15, weight: .light)).foregroundStyle(Color.muted).frame(width: 20).padding(.top, 2)
+            PrismIcon(icon, size: 15).foregroundStyle(Color.muted).frame(width: 20).padding(.top, 2)
             VStack(alignment: .leading, spacing: 6) { Text(title).font(.system(size: 11, weight: .medium)); Text(text).font(.system(size: 10)).foregroundStyle(Color.muted).lineSpacing(3) }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -324,10 +324,10 @@ struct FloatingControls: View {
             Circle().fill(model.phase == .paused ? Color.orange : .red).frame(width: 8, height: 8)
             Text(RecordingMath.clock(telemetry.elapsed)).font(.system(size: 16, weight: .medium, design: .monospaced)).foregroundStyle(.white).frame(width: 75)
             Button { model.togglePause() } label: { AnimatedSymbol(name: model.phase == .paused ? "play.fill" : "pause.fill").frame(width: 24, height: 30) }.buttonStyle(InteractiveButton(radius: 6)).foregroundStyle(.white).help("Pause / Resume")
-            Button { model.addMarker() } label: { Image(systemName: "bookmark").frame(width: 24, height: 30) }.buttonStyle(InteractiveButton(radius: 6)).foregroundStyle(.white).help("Add marker")
+            Button { model.addMarker() } label: { PrismIcon("bookmark", size: 16).frame(width: 24, height: 30) }.buttonStyle(InteractiveButton(radius: 6)).foregroundStyle(.white).help("Add marker")
             Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 20)
-            Button { Task { await model.stopRecording() } } label: { Image(systemName: "stop.fill").foregroundStyle(.white).frame(width: 30, height: 30).background(Color.red, in: RoundedRectangle(cornerRadius: 8)) }.buttonStyle(InteractiveButton(radius: 8)).help("Stop & Save")
-            Button { model.showMainWindow() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").foregroundStyle(.white.opacity(0.5)).font(.system(size: 12)).frame(width: 24, height: 30) }.buttonStyle(InteractiveButton(radius: 6)).help("Show Prism")
+            Button { Task { await model.stopRecording() } } label: { PrismIcon("stop.fill", size: 16).foregroundStyle(.white).frame(width: 30, height: 30).background(Color.red, in: RoundedRectangle(cornerRadius: 8)) }.buttonStyle(InteractiveButton(radius: 8)).help("Stop & Save")
+            Button { model.showMainWindow() } label: { PrismIcon("arrow.up.left.and.arrow.down.right", size: 16).foregroundStyle(.white.opacity(0.5)).font(.system(size: 12)).frame(width: 24, height: 30) }.buttonStyle(InteractiveButton(radius: 6)).help("Show Prism")
         }.padding(18).background(Color.previewBase, in: RoundedRectangle(cornerRadius: 18)).overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.12)))
     }
 }

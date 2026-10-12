@@ -1,22 +1,19 @@
 import AppKit
+
+// Resample the approved artwork at exact macOS icon sizes.
+guard CommandLine.arguments.count == 3 else { fatalError("Usage: make-icon.swift <output> <master.png>") }
 let output = URL(fileURLWithPath: CommandLine.arguments[1]).appendingPathComponent("AppIcon.iconset")
+guard let source = NSImage(contentsOfFile: CommandLine.arguments[2]),
+      let cg = source.cgImage(forProposedRect: nil, context: nil, hints: nil) else { fatalError("App icon master is unreadable") }
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
 for size in [16, 32, 128, 256, 512] {
     for scale in [1, 2] {
         let pixels = size * scale
-        let image = NSImage(size: CGSize(width: pixels, height: pixels))
-        image.lockFocus()
-        let rect = CGRect(x: Double(pixels) * 0.06, y: Double(pixels) * 0.06, width: Double(pixels) * 0.88, height: Double(pixels) * 0.88)
-        let path = NSBezierPath(roundedRect: rect, xRadius: Double(pixels) * 0.22, yRadius: Double(pixels) * 0.22)
-        let gradient = NSGradient(starting: NSColor(red: 0.17, green: 0.71, blue: 0.80, alpha: 1), ending: NSColor(red: 0.16, green: 0.39, blue: 0.78, alpha: 1))!
-        gradient.draw(in: path, angle: -55)
-        NSColor.white.withAlphaComponent(0.95).setStroke()
-        let outer = NSBezierPath(ovalIn: CGRect(x: Double(pixels) * 0.24, y: Double(pixels) * 0.24, width: Double(pixels) * 0.52, height: Double(pixels) * 0.52))
-        outer.lineWidth = Double(pixels) * 0.065; outer.stroke()
-        NSColor.white.setFill()
-        NSBezierPath(ovalIn: CGRect(x: Double(pixels) * 0.395, y: Double(pixels) * 0.395, width: Double(pixels) * 0.21, height: Double(pixels) * 0.21)).fill()
-        image.unlockFocus()
-        let bitmap = NSBitmapImageRep(data: image.tiffRepresentation!)!
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: pixels * 4, bitsPerPixel: 32), let context = NSGraphicsContext(bitmapImageRep: bitmap) else { fatalError("Could not create icon bitmap") }
+        context.cgContext.interpolationQuality = .high
+        context.cgContext.draw(cg, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
         let name = "icon_\(size)x\(size)\(scale == 2 ? "@2x" : "").png"
         try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(name))
     }

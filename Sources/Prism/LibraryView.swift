@@ -32,18 +32,18 @@ struct LibraryView: View {
                     Button {
                         importing = true
                         Task { do { try await library.importVideos() } catch { model.error = error.localizedDescription }; importing = false }
-                    } label: { Label(importing ? "Importing…" : "Import video", systemImage: "square.and.arrow.down") }.buttonStyle(QuietButton()).disabled(importing || model.phase.isActive || library.isBusy)
+                    } label: { PrismLabel(importing ? "Importing…" : "Import video", systemImage: "square.and.arrow.down") }.buttonStyle(QuietButton()).disabled(importing || model.phase.isActive || library.isBusy)
                 }
                 HStack(spacing: 12) {
                     HStack(spacing: 9) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(Color.muted)
+                        PrismIcon("magnifyingglass", size: 16).foregroundStyle(Color.muted)
                         TextField("Search recordings", text: $model.search).textFieldStyle(.plain).font(.system(size: 12))
-                        if !model.search.isEmpty { Button { model.search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Color.muted).padding(3) }.buttonStyle(InteractiveButton(radius: 5)) }
+                        if !model.search.isEmpty { Button { model.search = "" } label: { PrismIcon("xmark.circle.fill", size: 16).foregroundStyle(Color.muted).padding(3) }.buttonStyle(InteractiveButton(radius: 5)) }
                     }.padding(12).background(Color.surface, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.line)).frame(maxWidth: 350)
                     Spacer()
                     Picker("Project", selection: $model.projectFilter) { Text("All projects").tag(""); ForEach(library.projects, id: \.self) { Text($0).tag($0) } }.labelsHidden().frame(width: 130)
                     Button { model.favoritesOnly.toggle() } label: {
-                        Label("Favorites", systemImage: model.favoritesOnly ? "star.fill" : "star").foregroundStyle(model.favoritesOnly ? Color.accent : Color.muted)
+                        PrismLabel("Favorites", systemImage: model.favoritesOnly ? "star.fill" : "star").foregroundStyle(model.favoritesOnly ? Color.accent : Color.muted)
                     }.buttonStyle(QuietButton()).accessibilityValue(model.favoritesOnly ? "Selected" : "Off")
                     Picker("Sort recordings", selection: $model.librarySort) { ForEach(LibrarySort.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 135)
                     Menu {
@@ -51,7 +51,7 @@ struct LibraryView: View {
                             do { let count = try await library.recoverRecordings(); model.notify("Recovered \(count) recordings") }
                             catch { model.error = error.localizedDescription }
                         } }
-                    } label: { Image(systemName: "ellipsis.circle").foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).fixedSize().disabled(library.isBusy || model.phase.isActive)
+                    } label: { PrismIcon("ellipsis.circle", size: 16).foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).fixedSize().disabled(library.isBusy || model.phase.isActive)
                 }
                 if selecting {
                     VStack(alignment: .leading, spacing: 10) {
@@ -66,23 +66,23 @@ struct LibraryView: View {
                         Picker("Output preset", selection: $batchPreset) { ForEach(OutputPreset.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 130)
                         Button("Export selected…") { batchExport() }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty || model.phase.isActive)
                         Spacer()
-                        Button { trashingSelected = true } label: { Image(systemName: "trash") }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty)
+                        Button { trashingSelected = true } label: { PrismIcon("trash", size: 16) }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty)
                     }
                     }.card(padding: 12)
                 }
                 if let notice = library.notice {
-                    HStack { Image(systemName: "info.circle").foregroundStyle(Color.orange); Text(notice).font(.system(size: 11)).foregroundStyle(Color.muted); Spacer(); Button { library.notice = nil } label: { Image(systemName: "xmark").padding(4) }.buttonStyle(InteractiveButton(radius: 5)) }.card(padding: 14)
+                    HStack { PrismIcon("info.circle", size: 16).foregroundStyle(Color.orange); Text(notice).font(.system(size: 11)).foregroundStyle(Color.muted); Spacer(); Button { library.notice = nil } label: { PrismIcon("xmark", size: 16).padding(4) }.buttonStyle(InteractiveButton(radius: 5)) }.card(padding: 14)
                 }
                 if library.isBusy { HStack { ProgressView().controlSize(.small); Text("Updating your library…").font(.system(size: 11)).foregroundStyle(Color.muted) } }
                 if model.filteredRecordings.isEmpty {
                     VStack(spacing: 18) {
-                        Image(systemName: library.recordings.isEmpty ? "rectangle.stack.badge.play" : "magnifyingglass").font(.system(size: 48, weight: .ultraLight)).foregroundStyle(Color.accent)
+                        PrismIcon(library.recordings.isEmpty ? "rectangle.stack.badge.play" : "magnifyingglass", size: 48).foregroundStyle(Color.accent)
                             .frame(width: 110, height: 100).background(Color.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 25))
                         Text(library.recordings.isEmpty ? "A blank canvas, for now." : "No matching takes.").font(.system(size: 21, weight: .medium))
                         Text(library.recordings.isEmpty ? "Record your first walkthrough, big idea, or little discovery.\nWe’ll keep it here, ready to play, trim, and share." : "Try another search or turn off the favorites filter.")
                             .font(.system(size: 12)).foregroundStyle(Color.muted).multilineTextAlignment(.center).lineSpacing(5)
                         if library.recordings.isEmpty {
-                            Button { model.destination = .studio } label: { Label("Create your first recording", systemImage: "record.circle") }.buttonStyle(PrimaryButton()).padding(.top, 8)
+                            Button { model.destination = .studio } label: { PrismLabel("Create your first recording", systemImage: "record.circle") }.buttonStyle(PrimaryButton()).padding(.top, 8)
                         }
                     }.frame(maxWidth: .infinity).frame(minHeight: 450).card(padding: 30)
                 } else {
@@ -93,9 +93,9 @@ struct LibraryView: View {
                                     ZStack(alignment: .bottomTrailing) {
                                         RoundedRectangle(cornerRadius: 10).fill(Color.elevated)
                                         RecordingThumbnail(recording: recording)
-                                        Image(systemName: "play.circle.fill").font(.system(size: 33)).foregroundStyle(.white.opacity(0.9)).shadow(radius: 5).frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        PrismIcon("play.circle.fill", size: 33).foregroundStyle(.white.opacity(0.9)).shadow(radius: 5).frame(maxWidth: .infinity, maxHeight: .infinity)
                                         Text(RecordingMath.clock(recording.duration)).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(.white).padding(6).background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 5)).padding(8)
-                                        if selecting { Image(systemName: selectedIDs.contains(recording.id) ? "checkmark.circle.fill" : "circle").font(.system(size: 22)).foregroundStyle(selectedIDs.contains(recording.id) ? Color.accent : Color.white).padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading) }
+                                        if selecting { PrismIcon(selectedIDs.contains(recording.id) ? "checkmark.circle.fill" : "circle", size: 22).foregroundStyle(selectedIDs.contains(recording.id) ? Color.accent : Color.white).padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading) }
                                     }.frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 10))
                                 }.buttonStyle(InteractiveButton(radius: 10)).disabled(model.phase.isActive).accessibilityLabel("Play and trim \(recording.title)")
                                 HStack(alignment: .top) {
@@ -111,9 +111,9 @@ struct LibraryView: View {
                                         Button("Show in Finder", systemImage: "folder") { NSWorkspace.shared.activateFileViewerSelecting([library.fileURL(recording)]) }
                                         Divider()
                                         Button("Move to Trash", systemImage: "trash", role: .destructive) { deleting = recording }
-                                    } label: { Image(systemName: "ellipsis").font(.system(size: 14)).foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).fixedSize().disabled(library.isBusy)
+                                    } label: { PrismIcon("ellipsis", size: 14).foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).fixedSize().disabled(library.isBusy)
                                 }.padding(.top, 14)
-                                HStack { Chip(title: "\(recording.width) × \(recording.height)", color: .muted); Spacer(); if recording.favorite { Image(systemName: "star.fill").foregroundStyle(Color.accent).font(.system(size: 10)) }; Text(recording.bytes.fileSize).font(.system(size: 10)).foregroundStyle(Color.muted) }.padding(.top, 13)
+                                HStack { Chip(title: "\(recording.width) × \(recording.height)", color: .muted); Spacer(); if recording.favorite { PrismIcon("star.fill", size: 16).foregroundStyle(Color.accent).font(.system(size: 10)) }; Text(recording.bytes.fileSize).font(.system(size: 10)).foregroundStyle(Color.muted) }.padding(.top, 13)
                                 if let project = recording.project { Text(project).font(.system(size: 10, weight: .medium)).foregroundStyle(Color.accent).padding(.top, 8) }
                                 if let tags = recording.tags, !tags.isEmpty { Text(tags.joined(separator: " · ")).font(.system(size: 9)).foregroundStyle(Color.muted).lineLimit(1).padding(.top, 5) }
                             }.card(padding: 12)
@@ -175,7 +175,7 @@ private struct RecordingThumbnail: View {
     var body: some View {
         Group {
             if let image { Image(nsImage: image).resizable().scaledToFit().padding(4) }
-            else { Image(systemName: "film").font(.system(size: 25)).foregroundStyle(Color.muted).frame(maxWidth: .infinity, maxHeight: .infinity) }
+            else { PrismIcon("film", size: 25).foregroundStyle(Color.muted).frame(maxWidth: .infinity, maxHeight: .infinity) }
         }.task(id: recording.id) { image = await library.thumbnail(for: recording) }
     }
 }

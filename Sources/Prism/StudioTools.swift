@@ -13,13 +13,13 @@ struct StudioPresets: View {
                     model.settings = settings
                 } label: {
                     HStack(spacing: compact ? 6 : 10) {
-                        Image(systemName: preset.icon).font(.system(size: compact ? 14 : 18, weight: .light)).foregroundStyle(Color.accent)
+                        PrismIcon(preset.icon, size: compact ? 14 : 18).foregroundStyle(Color.accent)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(preset.rawValue).font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.ink).lineLimit(1)
                             if !compact { Text(preset.detail).font(.system(size: 9)).foregroundStyle(Color.muted) }
                         }
                         Spacer(minLength: 0)
-                        Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(Color.accent).opacity(selected ? 1 : 0)
+                        PrismIcon("checkmark.circle.fill", size: 12).foregroundStyle(Color.accent).opacity(selected ? 1 : 0)
                     }.padding(compact ? 10 : 13).frame(maxWidth: .infinity, alignment: .leading)
                         .selectionSurface(selected, radius: 11)
                 }.buttonStyle(InteractiveButton(radius: 11)).help("Apply \(preset.rawValue) recording settings")

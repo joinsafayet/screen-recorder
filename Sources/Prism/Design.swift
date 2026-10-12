@@ -25,8 +25,8 @@ extension Color {
     static let muted = adaptive(dark: 0x97A9C1, light: 0x63748D)
     static let line = adaptive(dark: 0x2B394D, light: 0xDCE4F0)
     static let previewBase = Color(red: 0.04, green: 0.08, blue: 0.14)
-    static let brandBlue = Color(red: 0.25, green: 0.54, blue: 0.95)
-    static let brandCyan = Color(red: 0.17, green: 0.71, blue: 0.80)
+    static let brandBlue = Color(red: 0.204, green: 0.420, blue: 0.922)
+    static let brandCyan = Color(red: 0.208, green: 0.737, blue: 0.647)
     private static func adaptive(dark: UInt32, light: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
@@ -89,7 +89,7 @@ struct Chip: View {
     var color: Color = .muted
     var body: some View {
         HStack(spacing: 5) {
-            if let icon { Image(systemName: icon).font(.system(size: 10, weight: .semibold)) }
+            if let icon { PrismIcon(icon, size: 10) }
             Text(title).font(.system(size: 10, weight: .semibold))
         }.foregroundStyle(color).padding(.horizontal, 9).padding(.vertical, 6)
             .background(color.opacity(0.09), in: Capsule()).overlay(Capsule().stroke(color.opacity(0.15)))
@@ -97,11 +97,17 @@ struct Chip: View {
 }
 struct AnimatedSymbol: View {
     let name: String
+    var size: CGFloat = 16
     @Environment(\.prismReduceMotion) private var reduceMotion
     var body: some View {
-        Image(systemName: name)
-            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-            .animation(PrismMotion.feedback(reduceMotion), value: name)
+        if PrismGlyph.matching(name) != nil {
+            ZStack { PrismIcon(name, size: size).id(name).transition(reduceMotion ? .identity : .opacity) }
+                .animation(PrismMotion.feedback(reduceMotion), value: name)
+        } else {
+            Image(systemName: name).symbolRenderingMode(.monochrome).font(.system(size: size))
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                .animation(PrismMotion.feedback(reduceMotion), value: name)
+        }
     }
 }
 struct PrimaryButton: ButtonStyle {
@@ -163,7 +169,7 @@ struct FeatureToggle: View {
     @Environment(\.prismReduceMotion) private var reduceMotion
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 16)).foregroundStyle(value ? Color.accent : Color.muted)
+            PrismIcon(icon, size: 16).foregroundStyle(value ? Color.accent : Color.muted)
                 .frame(width: 34, height: 36).background(Color.elevated, in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.ink)
@@ -188,9 +194,9 @@ struct RootView: View {
             if sidebarVisible { SidebarView().frame(minWidth: 180, idealWidth: 210, maxWidth: 260) }
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Button { sidebarVisible.toggle() } label: { Image(systemName: "sidebar.left") }.buttonStyle(InteractiveButton(radius: 5)).help("Toggle sidebar").keyboardShortcut("s", modifiers: [.command, .option])
+                    Button { sidebarVisible.toggle() } label: { PrismIcon("sidebar.left", size: 16) }.buttonStyle(InteractiveButton(radius: 5)).help("Toggle sidebar").keyboardShortcut("s", modifiers: [.command, .option])
                     Text("WORKSPACE").font(.system(size: 9, weight: .bold)).tracking(1.5).foregroundStyle(Color.muted)
-                    Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(Color.muted.opacity(0.5))
+                    PrismIcon("chevron.right", size: 8).foregroundStyle(Color.muted.opacity(0.5))
                     Text(model.destination.rawValue).font(.system(size: 11, weight: .medium)).foregroundStyle(Color.ink)
                     Spacer()
                     if model.phase.isActive { Chip(title: model.phase.label, icon: "circle.fill", color: model.phase == .paused ? .orange : .accent) }
@@ -214,7 +220,7 @@ struct RootView: View {
         .tint(.accent)
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
-                HStack(spacing: 10) { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.mint); Text(toast).font(.system(size: 12, weight: .medium)) }
+                HStack(spacing: 10) { PrismIcon("checkmark.circle.fill", size: 16).foregroundStyle(Color.mint); Text(toast).font(.system(size: 12, weight: .medium)) }
                     .padding(16).background(Color.elevated, in: Capsule()).overlay(Capsule().stroke(Color.line)).shadow(color: .black.opacity(0.15), radius: 20)
                     .padding(.bottom, 20).allowsHitTesting(false)
                     .transition(PrismMotion.reveal(reduceMotion))
@@ -251,12 +257,9 @@ struct SidebarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 11) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12).fill(LinearGradient(colors: [.brandBlue, .brandCyan], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    Image(systemName: "record.circle.fill").font(.system(size: 24, weight: .medium)).foregroundStyle(.white)
-                }.frame(width: 42, height: 42).shadow(color: Color.accent.opacity(0.25), radius: 12, y: 4)
+                PrismBrandBadge()
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Prism").font(.system(size: 23, weight: .bold, design: .rounded)).tracking(-0.8)
+                    Text("Prism").font(.system(size: 23, weight: .semibold)).tracking(-0.6)
                     Text("SCREEN STUDIO").font(.system(size: 8, weight: .bold)).tracking(2).foregroundStyle(Color.muted)
                 }
             }.padding(.bottom, 38)
@@ -267,12 +270,12 @@ struct SidebarView: View {
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([library.folder])
             } label: {
-                HStack(spacing: 11) { Image(systemName: "folder").frame(width: 20); Text("Save folder").font(.system(size: 12)); Spacer(); Image(systemName: "arrow.up.right").font(.system(size: 9)) }
+                HStack(spacing: 11) { PrismIcon("folder", size: 16).frame(width: 20); Text("Save folder").font(.system(size: 12)); Spacer(); PrismIcon("arrow.up.right", size: 9) }
                     .foregroundStyle(Color.muted).padding(12)
             }.buttonStyle(InteractiveButton(radius: 9))
             Spacer(minLength: 28)
             VStack(alignment: .leading, spacing: 12) {
-                HStack { Image(systemName: "internaldrive").foregroundStyle(Color.accent); Text("Your local library").font(.system(size: 11, weight: .semibold)) }
+                HStack { PrismIcon("internaldrive", size: 16).foregroundStyle(Color.accent); Text("Your local library").font(.system(size: 11, weight: .semibold)) }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(library.totalBytes.fileSize).font(.system(size: 20, weight: .semibold, design: .rounded))
                     Text("saved").font(.system(size: 10)).foregroundStyle(Color.muted)
@@ -289,7 +292,7 @@ struct SidebarView: View {
     private func navItem(_ item: Destination) -> some View {
         Button { model.destination = item } label: {
             HStack(spacing: 11) {
-                Image(systemName: item.icon).font(.system(size: 16)).frame(width: 20)
+                PrismIcon(item.icon, size: 18).accessibilityHidden(true).frame(width: 20)
                 Text(item.rawValue).font(.system(size: 12, weight: .semibold))
                 Spacer()
                 if item == .library { Text("\(library.recordings.count)").font(.system(size: 10, weight: .semibold)).padding(.horizontal, 7).padding(.vertical, 3).background(Color.line, in: Capsule()) }

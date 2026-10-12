@@ -1,7 +1,8 @@
 #!/bin/zsh
 set -euo pipefail
 cd "${0:A:h}/.."
-mkdir -p build/PrismUIReview.app/Contents/MacOS
+mkdir -p build/PrismUIReview.app/Contents/MacOS build/PrismUIReview.app/Contents/Resources
+cp Assets/Brand/PrismMark.png build/PrismUIReview.app/Contents/Resources/PrismMark.png
 sources=(Sources/Prism/*.swift)
 sources=(${sources:#*PrismApp.swift})
 swiftc -O -parse-as-library -swift-version 5 -target "$(uname -m)-apple-macos15.0" "${sources[@]}" Tests/UIReview.swift -o build/PrismUIReview.app/Contents/MacOS/PrismUIReview

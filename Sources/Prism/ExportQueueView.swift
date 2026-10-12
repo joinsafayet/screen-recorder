@@ -15,15 +15,15 @@ struct ExportQueueView: View {
                     Button(queue.running ? "Pause queue" : "Start exports") { if queue.running { queue.pause() } else { queue.start() } }.buttonStyle(PrimaryButton()).disabled(queue.captureActive || queue.pendingCount == 0)
                     Button("Clear finished") { queue.clearFinished() }.buttonStyle(QuietButton())
                 }
-                if queue.captureActive { Label(model.editorExporting ? "The queue pauses while your edited copy exports." : "Exports pause during recording to keep capture responsive.", systemImage: "pause.circle").font(.system(size: 12)).foregroundStyle(Color.accent).card(padding: 15) }
+                if queue.captureActive { PrismLabel(model.editorExporting ? "The queue pauses while your edited copy exports." : "Exports pause during recording to keep capture responsive.", systemImage: "pause.circle").font(.system(size: 12)).foregroundStyle(Color.accent).card(padding: 15) }
                 if let issue = queue.issue { Text(issue).font(.system(size: 12)).foregroundStyle(.orange).card(padding: 15) }
                 if queue.jobs.isEmpty {
-                    VStack(spacing: 15) { Image(systemName: "square.and.arrow.up.on.square").font(.system(size: 44, weight: .light)).foregroundStyle(Color.accent); Text("Your next exports start here.").font(.system(size: 20, weight: .medium)); Text("Select recordings in the library or queue an edited copy from the timeline.").font(.system(size: 12)).foregroundStyle(Color.muted) }.frame(maxWidth: .infinity, minHeight: 350).card(padding: 24)
+                    VStack(spacing: 15) { PrismIcon("square.and.arrow.up.on.square", size: 44).foregroundStyle(Color.accent); Text("Your next exports start here.").font(.system(size: 20, weight: .medium)); Text("Select recordings in the library or queue an edited copy from the timeline.").font(.system(size: 12)).foregroundStyle(Color.muted) }.frame(maxWidth: .infinity, minHeight: 350).card(padding: 24)
                 }
                 LazyVStack(spacing: 12) {
                     ForEach(queue.jobs) { job in
                         HStack(spacing: 16) {
-                            Image(systemName: job.status == .completed ? "checkmark.circle.fill" : job.status == .failed ? "exclamationmark.circle" : "film").font(.system(size: 24)).foregroundStyle(job.status == .completed ? Color.mint : Color.accent)
+                            PrismIcon(job.status == .completed ? "checkmark.circle.fill" : job.status == .failed ? "exclamationmark.circle" : "film", size: 24).foregroundStyle(job.status == .completed ? Color.mint : Color.accent)
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(job.title).font(.system(size: 13, weight: .semibold))
                                 Text(URL(fileURLWithPath: job.targetPath).lastPathComponent).font(.system(size: 10)).foregroundStyle(Color.muted).lineLimit(1)
@@ -34,7 +34,7 @@ struct ExportQueueView: View {
                             Text(job.status == .running ? "\(Int(job.progress * 100))%" : job.status.rawValue.capitalized).font(.system(size: 11, weight: .medium)).foregroundStyle(Color.muted)
                             if [.waiting, .running].contains(job.status) { Button("Cancel") { queue.cancel(job.id) }.buttonStyle(QuietButton()) }
                             if [.failed, .cancelled].contains(job.status) { Button("Retry") { queue.retry(job.id) }.buttonStyle(QuietButton()) }
-                            if job.status == .completed { Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: job.targetPath)]) } label: { Image(systemName: "folder") }.buttonStyle(QuietButton()) }
+                            if job.status == .completed { Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: job.targetPath)]) } label: { PrismIcon("folder", size: 16) }.buttonStyle(QuietButton()) }
                         }.card(padding: 18)
                     }
                 }

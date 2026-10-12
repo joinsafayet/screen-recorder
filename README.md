@@ -6,6 +6,10 @@ A native macOS recording studio with adjustable capture areas, a non-destructive
 
 Open **build/Prism.app** in Finder, or unpack **build/Prism-macOS.zip**. Use **Choose with macOS** to select a source through the system picker, or **Set up recording** for screen access. Grant microphone/camera access when those devices are enabled. macOS may require restarting Prism after changing screen permissions. The package is signed locally for development; it is not notarized.
 
+## Identity
+
+Prism uses a folded P capture-aperture mark in cobalt and sea green, with a navy macOS icon tile. A 30-glyph native vector family covers navigation, capture, audio, preparation, and editing tools; small glyphs simplify below 16 points. Brand assets, palette, and artwork prompts are in [the brand guide](Assets/Brand/README.md).
+
 ## Recording studio
 
 - Resizable sidebar and recording inspector, a larger source preview, and a compact layout with settings in a separate panel.

@@ -67,7 +67,7 @@ enum PresenterCorner: String, CaseIterable, Identifiable, Codable {
 enum RecordingPreset: String, CaseIterable, Identifiable {
     case everyday = "Everyday", tutorial = "Tutorial", motion = "Smooth motion", detail = "Detail"
     var id: String { rawValue }
-    var icon: String { switch self { case .everyday: return "sparkles"; case .tutorial: return "person.bubble"; case .motion: return "bolt"; case .detail: return "4k.tv" } }
+    var icon: String { switch self { case .everyday: return "prism.everyday"; case .tutorial: return "person.bubble"; case .motion: return "bolt"; case .detail: return "4k.tv" } }
     var detail: String { switch self { case .everyday: return "1080p · 30 fps"; case .tutorial: return "Voice + click highlights"; case .motion: return "1080p · 60 fps"; case .detail: return "4K · HEVC" } }
     func apply(to settings: inout CaptureSettings) {
         settings.quality = self == .detail ? .high : .balanced

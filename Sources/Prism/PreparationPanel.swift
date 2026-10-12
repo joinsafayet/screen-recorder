@@ -10,7 +10,7 @@ struct PreparationPanel: View {
                 Spacer()
                 if preparation.running { Chip(title: "Live inputs", icon: "circle.fill", color: .mint) }
                 Button { if preparation.running { Task { await model.stopPreparation() } } else { model.beginPreparation() } } label: {
-                    Label(preparation.running ? "Stop preview" : model.preparingPreview ? "Preparing…" : "Test setup", systemImage: preparation.running ? "stop.circle" : "waveform")
+                    PrismLabel(preparation.running ? "Stop preview" : model.preparingPreview ? "Preparing…" : "Test setup", systemImage: preparation.running ? "stop.circle" : "waveform")
                 }.buttonStyle(QuietButton()).disabled(model.phase.isActive || model.preparingPreview)
             }
             HStack(spacing: 18) {
@@ -21,7 +21,7 @@ struct PreparationPanel: View {
                 Spacer()
                 Picker("Estimate length", selection: $model.estimateMinutes) { ForEach([5, 10, 30, 60], id: \.self) { Text("\($0) min").tag($0) } }.labelsHidden().frame(width: 90)
             }
-            if let free = model.freeSpace { Label("\(free.fileSize) available in your save folder", systemImage: "internaldrive").font(.system(size: 10)).foregroundStyle(free > 500_000_000 ? Color.muted : Color.orange) }
+            if let free = model.freeSpace { PrismLabel("\(free.fileSize) available in your save folder", systemImage: "internaldrive").font(.system(size: 10)).foregroundStyle(free > 500_000_000 ? Color.muted : Color.orange) }
             if preparation.running {
                 if model.settings.microphone { level("Microphone", preparation.microphoneLevel) }
                 if model.settings.systemAudio { level("System audio", preparation.systemLevel) }
@@ -30,7 +30,7 @@ struct PreparationPanel: View {
             HStack {
                 Text("Device tests run only when you start the preview.").font(.system(size: 10)).foregroundStyle(Color.muted)
                 Spacer()
-                Button { model.startRecording(testSeconds: 5) } label: { Label("5-second test take", systemImage: "record.circle") }.buttonStyle(QuietButton()).disabled(!model.canCapture || model.phase.isActive)
+                Button { model.startRecording(testSeconds: 5) } label: { PrismLabel("5-second test take", systemImage: "record.circle") }.buttonStyle(QuietButton()).disabled(!model.canCapture || model.phase.isActive)
             }
         }.card(padding: 14)
     }
@@ -51,7 +51,7 @@ struct PreparationAction: View {
     @EnvironmentObject private var preparation: PreparationMonitor
     var body: some View {
         Button { if preparation.running { Task { await model.stopPreparation() } } else { model.beginPreparation() } } label: {
-            Label(preparation.running ? "Stop preview" : "Test setup", systemImage: "waveform")
+            PrismLabel(preparation.running ? "Stop preview" : "Test setup", systemImage: "waveform")
         }.buttonStyle(QuietButton()).disabled(model.phase.isActive || model.preparingPreview)
     }
 }
