@@ -295,6 +295,7 @@ func unwrap<T>(_ value: T?) throws -> T {
             ("Area selection retry, release position, and cancellation", { suite.testRegionSelectionRetriesSmallDragsAndUsesFinalMouseUp() }),
             ("Adjustable regions and saved area persistence", { try suite.testAdjustableRegionsAndSavedAreas() }),
             ("Preset selection and effective codec", { suite.testPresetSelectionUsesEffectiveCodecAndPreservesOtherOptions() }),
+            ("Preparation output estimates and audio activity", { suite.testPreparationEstimatesAndAudioMeter() }),
             ("Duration formatting", { suite.testClockHandlesLongAndNegativeDurations() }),
             ("Pause removal and static-screen tail", { try await suite.testVideoWriterRemovesPauseAndRetainsStaticTail() }),
             ("Empty recording failure", { try await suite.testEmptyWriterReportsFailureInsteadOfSavingBrokenVideo() }),

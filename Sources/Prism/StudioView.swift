@@ -20,6 +20,7 @@ struct StudioView: View {
                     }.padding(10).frame(width: 210).background(Color.surface, in: RoundedRectangle(cornerRadius: 9)).disabled(model.phase.isActive)
                     Button { Task { await model.refreshSources() } } label: { Image(systemName: "arrow.clockwise").frame(width: 16, height: 16) }
                         .buttonStyle(QuietButton()).disabled(model.loadingSources || model.phase.isActive).help("Refresh capture sources")
+                    PreparationAction()
                     Button { inspectorVisible.toggle() } label: { Image(systemName: "sidebar.right").frame(width: 16, height: 16) }
                         .buttonStyle(QuietButton()).help("Show or hide recording inspector")
                 }.padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 16)
@@ -31,8 +32,9 @@ struct StudioView: View {
                             CaptureModeSelector().disabled(model.phase.isActive)
                             SourcePreview(height: min(420, max(240, geometry.size.height - 360)))
                             CaptureSourcePicker().disabled(model.phase.isActive)
-                            Label("Prism and its controls stay outside your capture.", systemImage: "lock.shield")
+                            Label(model.pickedFilter?.style == .display ? "Prism hides during capture. Use the menu bar to pause or stop." : "Prism and its controls stay outside your capture.", systemImage: "lock.shield")
                                 .font(.system(size: 10)).foregroundStyle(Color.muted)
+                            PreparationPanel()
                             if model.phase.isCapturing || model.telemetry.statistics.frames > 0 { CaptureMonitor() }
                         }.padding(18)
                     }.frame(minWidth: 410, maxWidth: .infinity).background(Color.surface, in: RoundedRectangle(cornerRadius: 16))
@@ -136,13 +138,14 @@ struct RecordingInspector: View {
 }
 
 struct SourcePreview: View {
+    @EnvironmentObject private var preparation: PreparationMonitor
     var height: CGFloat = 249
     @EnvironmentObject private var model: AppModel
     @Environment(\.prismReduceMotion) private var reduceMotion
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12).fill(Color.previewBase)
-            if let preview = model.preview {
+            if let preview = preparation.screenImage ?? model.preview {
                 Image(nsImage: preview).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 12)).padding(8)
             } else {
                 GeometryReader { geo in
@@ -166,9 +169,19 @@ struct SourcePreview: View {
                     }
                 }
             }
+            if model.settings.camera, let image = preparation.cameraImage {
+                GeometryReader { geometry in
+                    let d = min(geometry.size.width, geometry.size.height) * model.settings.presenterSize
+                    let left = model.settings.presenterCorner == .bottomLeft || model.settings.presenterCorner == .topLeft
+                    let top = model.settings.presenterCorner == .topLeft || model.settings.presenterCorner == .topRight
+                    Image(nsImage: image).resizable().scaledToFill().frame(width: d, height: d).clipShape(Circle())
+                        .scaleEffect(x: model.settings.mirrorCamera ? -1 : 1, y: 1).overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 2))
+                        .position(x: left ? d / 2 + 18 : geometry.size.width - d / 2 - 18, y: top ? d / 2 + 38 : geometry.size.height - d / 2 - 38)
+                }.allowsHitTesting(false)
+            }
             VStack {
                 HStack {
-                    HStack(spacing: 5) { Circle().fill(model.phase == .recording ? Color.red : Color.accent).frame(width: 5, height: 5); Text(model.phase.isCapturing ? "SOURCE SNAPSHOT" : "CAPTURE PREVIEW").font(.system(size: 8, weight: .bold)).tracking(1) }
+                    HStack(spacing: 5) { Circle().fill(model.phase == .recording ? Color.red : Color.accent).frame(width: 5, height: 5); Text(model.phase.isCapturing ? "SOURCE SNAPSHOT" : preparation.running ? "LIVE SETUP · 2 FPS" : "CAPTURE PREVIEW").font(.system(size: 8, weight: .bold)).tracking(1) }
                         .foregroundStyle(.white.opacity(0.8)).padding(8).background(.black.opacity(0.3), in: Capsule())
                     Spacer()
                     if model.loadingPreview { ProgressView().controlSize(.mini).tint(.white) }

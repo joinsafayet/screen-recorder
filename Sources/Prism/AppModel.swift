@@ -10,11 +10,18 @@ final class AppModel: ObservableObject {
         didSet {
             if let data = try? JSONEncoder().encode(settings) { UserDefaults.standard.set(data, forKey: "captureSettings") }
             if oldValue.mode != settings.mode { pickedFilter = nil }
+            if oldValue != settings { preparationTask?.cancel(); Task { await preparation.stop() } }
             if oldValue.mode != settings.mode || oldValue.showCursor != settings.showCursor { schedulePreview() }
         }
     }
     @Published var phase: CapturePhase = .idle
     let telemetry = RecordingTelemetry()
+    let preparation = PreparationMonitor()
+    @Published var preparingPreview = false
+    @Published var freeSpace: Int64?
+    @Published var estimateMinutes = 10
+    private var preparationTask: Task<Void, Never>?
+    private var testTakeSeconds = 0
     var elapsed: Double { telemetry.elapsed }
     @Published var sessionTitle = ""
     @Published var librarySort: LibrarySort = .newest
@@ -180,6 +187,7 @@ final class AppModel: ObservableObject {
     }
 
     private func schedulePreview() {
+        preparationTask?.cancel(); Task { await preparation.stop() }
         previewTask?.cancel()
         previewRequest = UUID(); preview = nil; loadingPreview = false
         guard canCapture, !phase.isActive else { return }
@@ -242,13 +250,49 @@ final class AppModel: ObservableObject {
         region = RegionGeometry.fit(saved.rect, in: CGRect(origin: .zero, size: screen.frame.size), aspect: regionAspect); schedulePreview()
     }
 
-    func startRecording() {
+    var outputEstimate: PreparationEstimate {
+        if let filter = pickedFilter { return .make(source: filter.contentRect.size, scale: Double(filter.pointPixelScale), settings: settings) }
+        let screen = NSScreen.screens.first { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == displayID } ?? NSScreen.main
+        if settings.mode == .region, let region { return .make(source: region.size, scale: Double(screen?.backingScaleFactor ?? 1), settings: settings) }
+        if settings.mode == .window, let window = selectedWindow { return .make(source: window.frame.size, scale: Double(screen?.backingScaleFactor ?? 1), settings: settings) }
+        if let display = selectedDisplay { return .make(source: CGSize(width: display.width, height: display.height), scale: 1, settings: settings) }
+        return .make(source: screen?.frame.size ?? CGSize(width: 1920, height: 1080), scale: Double(screen?.backingScaleFactor ?? 1), settings: settings)
+    }
+    func beginPreparation() {
+        guard !phase.isActive, !preparingPreview else { return }
+        preparingPreview = true
+        preparationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { preparingPreview = false }
+            do {
+                if settings.camera && !cameraAccess { cameraAccess = await AVCaptureDevice.requestAccess(for: .video); guard cameraAccess else { throw PrismError.message("Allow Camera access to preview your presenter.") } }
+                if settings.microphone && !microphoneAccess { microphoneAccess = await AVCaptureDevice.requestAccess(for: .audio); guard microphoneAccess else { throw PrismError.message("Allow Microphone access to test your voice.") } }
+                try Task.checkCancellation()
+                freeSpace = await library.availableCapacity()
+                var sourceFilter: SCContentFilter?
+                var sourceDisplay: SCDisplay?
+                if canCapture {
+                    let source = try await makeFilter()
+                    sourceFilter = source.0; sourceDisplay = source.1
+                }
+                var crop: CGRect?
+                if settings.mode == .region, let region, let display = sourceDisplay { crop = RecordingMath.captureRect(selection: region, displayHeight: display.frame.height) }
+                guard sourceFilter != nil || settings.camera || settings.microphone else { throw PrismError.message("Choose a source or enable a microphone or camera to test your setup.") }
+                try await preparation.start(settings: settings, filter: sourceFilter, previewScreen: pickedFilter?.style != .display, crop: crop)
+            } catch is CancellationError {} catch { await preparation.stop(); self.error = error.localizedDescription }
+        }
+    }
+    func stopPreparation() async { preparationTask?.cancel(); await preparation.stop() }
+
+    func startRecording(testSeconds: Int = 0) {
         guard !phase.isActive, !library.isBusy else { return }
+        testTakeSeconds = testSeconds
         startupCaptureError = nil
         phase = .preparing
         countdownTask = Task { [self] in
             phase = .preparing
             do {
+                await stopPreparation()
                 refreshPermissions()
                 guard canCapture else { throw PrismError.message("Allow Screen Recording access first. You can do this in Preferences → Permissions.") }
                 if settings.microphone, !microphoneAccess {
@@ -259,7 +303,7 @@ final class AppModel: ObservableObject {
                     cameraAccess = await AVCaptureDevice.requestAccess(for: .video)
                     guard cameraAccess else { throw PrismError.message("Camera access is needed for the presenter bubble.") }
                 }
-                let freeBytes = library.availableBytes
+                let freeBytes = await library.availableCapacity(); freeSpace = freeBytes
                 guard freeBytes == nil || freeBytes! > 500_000_000 else { throw PrismError.message("Free at least 500 MB in your save location before recording.") }
                 let (filter, display, size) = try await makeFilter()
                 let options = settings
@@ -278,7 +322,7 @@ final class AppModel: ObservableObject {
                 if options.mode == .region, let region, let display { config.sourceRect = RecordingMath.captureRect(selection: region, displayHeight: display.frame.height) }
                 config.scalesToFit = true
                 captureSourceName = sourceName
-                capturedTitle = sessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                capturedTitle = testSeconds > 0 ? "Setup test take" : sessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                 telemetry.reset()
                 for second in stride(from: options.countdown, through: 1, by: -1) {
                     try Task.checkCancellation(); phase = .countdown(second)
@@ -302,11 +346,12 @@ final class AppModel: ObservableObject {
                     guard self?.captureID == id else { return }; self?.telemetry.statistics = value
                 } }
                 engine = capture
+                if options.hideWindow || pickedFilter?.style == .display { mainWindow?.orderOut(nil) }
                 try await capture.start(filter: filter, configuration: config, url: url, settings: options)
                 if let startupCaptureError { throw startupCaptureError }
                 accumulated = 0; telemetry.elapsed = 0; activeStart = ProcessInfo.processInfo.systemUptime; phase = .recording
                 if options.hideWindow { mainWindow?.orderOut(nil) }
-                if options.showFloatingControls { showFloatingControls() }
+                if options.showFloatingControls && pickedFilter?.style != .display { showFloatingControls() }
                 timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
             } catch is CancellationError { phase = .idle }
             catch {
@@ -334,6 +379,7 @@ final class AppModel: ObservableObject {
                 Task { await stopRecording() }; return
             }
         }
+        if testTakeSeconds > 0, current >= Double(testTakeSeconds), phase.isCapturing { Task { await stopRecording() }; return }
         if let limit = recordingSettings?.stopAfterMinutes, limit > 0, elapsed >= Double(limit * 60), phase.isCapturing {
             Task { await stopRecording() }
         }

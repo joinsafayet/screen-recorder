@@ -18,3 +18,17 @@ extension Verification {
         expect(restored == saved)
     }
 }
+
+extension Verification {
+    func testPreparationEstimatesAndAudioMeter() {
+        var settings = CaptureSettings()
+        let hd = PreparationEstimate.make(source: CGSize(width: 3840, height: 2160), scale: 1, settings: settings)
+        expect(hd.width == 1920 && hd.height == 1080 && hd.bytesPerMinute > 60_000_000)
+        settings.fps = 60
+        let faster = PreparationEstimate.make(source: CGSize(width: 3840, height: 2160), scale: 1, settings: settings)
+        expect(faster.bytesPerMinute > hd.bytesPerMinute * 19 / 10)
+        expect(AudioActivity.rms([]) == 0 && AudioActivity.rms([0, 0, 0]) == 0)
+        expect(abs(AudioActivity.rms([0.1, -0.1]) - 0.4) < 0.001)
+        expect(AudioActivity.rms([1, -1]) == 1)
+    }
+}

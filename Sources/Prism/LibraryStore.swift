@@ -39,6 +39,11 @@ final class LibraryStore: ObservableObject {
     var totalDuration: Double { recordings.reduce(0) { $0 + $1.duration } }
     var availableBytes: Int64? { try? folder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage }
 
+    func availableCapacity() async -> Int64? {
+        let destination = folder
+        return await Task.detached(priority: .utility) { try? destination.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage }.value
+    }
+
     private func commit(_ next: [Recording]) throws {
         guard manifestWritable else { throw PrismError.message("The library index cannot be updated safely. Check permissions for Application Support/Prism.") }
         try JSONEncoder().encode(next).write(to: metadataURL, options: .atomic)

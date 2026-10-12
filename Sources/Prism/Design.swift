@@ -215,11 +215,12 @@ struct RootView: View {
             Button("OK", role: .cancel) { model.error = nil }
         } message: { Text(model.error ?? "") }
         .onAppear { AppContext.model = model; model.openStudioWindow = { [openWindow] in openWindow(id: "prism-studio") } }
-        .onChange(of: model.destination) { _, _ in model.mainWindow?.makeFirstResponder(nil) }
+        .onChange(of: model.destination) { _, destination in model.mainWindow?.makeFirstResponder(nil); if destination != .studio { Task { await model.stopPreparation() } } }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
             if let window = notification.object as? NSWindow, window === model.mainWindow { model.mainWindow = nil }
         }
         .environment(\.prismReduceMotion, reduceMotion)
+        .environmentObject(model.preparation)
     }
     private func page<Content: View>(_ destination: Destination, @ViewBuilder content: () -> Content) -> some View {
         content().frame(maxWidth: .infinity, maxHeight: .infinity)
