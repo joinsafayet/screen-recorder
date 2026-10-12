@@ -3,10 +3,10 @@ import CoreGraphics
 import AVFoundation
 
 enum Destination: String, CaseIterable, Identifiable {
-    case studio = "Recorder", library = "Recordings", settings = "Preferences"
+    case studio = "Recorder", library = "Recordings", exports = "Exports", settings = "Preferences"
     var id: String { rawValue }
     var icon: String {
-        switch self { case .studio: return "record.circle"; case .library: return "rectangle.stack"; case .settings: return "slider.horizontal.3" }
+        switch self { case .studio: return "record.circle"; case .library: return "rectangle.stack"; case .exports: return "square.and.arrow.up.on.square"; case .settings: return "slider.horizontal.3" }
     }
 }
 
@@ -110,7 +110,7 @@ struct CaptureStatistics: Sendable {
     var targetFPS = 30
 }
 
-enum ExportQuality: String, CaseIterable, Identifiable {
+enum ExportQuality: String, CaseIterable, Identifiable, Codable {
     case original = "Original quality", full = "High quality", hd = "1080p", compact = "720p · smaller file"
     var id: String { rawValue }
     func preset(trimmed: Bool) -> String {
@@ -200,6 +200,8 @@ struct Recording: Identifiable, Codable, Equatable {
     var pointers: [PointerSample]?
     var shortcuts: [ShortcutSample]?
     var captureSpotlight: Bool?
+    var project: String?
+    var tags: [String]?
 }
 
 enum CapturePhase: Equatable {

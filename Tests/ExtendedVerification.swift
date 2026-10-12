@@ -168,3 +168,46 @@ extension Verification {
         expect(TimelineEffects.pointer(at: 10, samples: [PointerSample(time: 0, x: 0.2, y: 0.4)]) == nil)
     }
 }
+
+extension Verification {
+    @MainActor func testLibraryOrganizationAndBatchFavorites() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("prism-organization-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = folder.appendingPathComponent("source.mp4")
+        var settings = CaptureSettings(); settings.systemAudio = false
+        let writer = try RecordingWriter(url: source, size: (320, 180), settings: settings)
+        writer.consume(try frame(at: 10), type: .screen); try await Task.sleep(for: .milliseconds(30)); try await writer.finish(activeDuration: 0.5)
+        let library = LibraryStore(folder: folder, support: folder.appendingPathComponent("Index"))
+        let recording = try await library.add(url: source, source: "Fixture", fps: 30)
+        try library.organize(ids: [recording.id], project: " Course ", tags: "Swift, tutorial, Swift, ")
+        try library.setFavorite(ids: [recording.id], value: true)
+        let restored = LibraryStore(folder: folder, support: folder.appendingPathComponent("Index"))
+        expect(restored.recordings[0].project == "Course" && restored.recordings[0].tags == ["Swift", "tutorial"] && restored.recordings[0].favorite)
+        do { try library.validateExportTarget(source); expect(false, "Protect every library original") } catch {}
+    }
+    @MainActor func testExportQueueCapturePriorityAndPersistence() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("prism-queue-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = folder.appendingPathComponent("source.mp4"), target = folder.appendingPathComponent("copy.mp4")
+        var settings = CaptureSettings(); settings.systemAudio = false
+        let writer = try RecordingWriter(url: source, size: (320, 180), settings: settings)
+        for index in 0..<30 { writer.consume(try frame(at: 10 + Double(index) / 30), type: .screen); try await Task.sleep(for: .milliseconds(3)) }
+        try await writer.finish(activeDuration: 1)
+        let original = try Data(contentsOf: source)
+        let library = LibraryStore(folder: folder, support: folder.appendingPathComponent("Index"))
+        let recording = try await library.add(url: source, source: "Fixture", fps: 30)
+        var document = TimelineDocument(recordingID: recording.id, duration: recording.duration); document.aspect = .square
+        let queue = ExportQueue(library: library)
+        try queue.enqueue(recording: recording, target: target, document: document, quality: .compact, format: .mp4)
+        queue.setCaptureActive(true); queue.start()
+        try await Task.sleep(for: .milliseconds(50)); expect(queue.jobs[0].status == .waiting && !FileManager.default.fileExists(atPath: target.path))
+        queue.setCaptureActive(false); queue.start(); await queue.waitUntilIdle(); await queue.flush()
+        expect(queue.jobs[0].status == .completed && queue.jobs[0].progress == 1)
+        let track = try await AVURLAsset(url: target).loadTracks(withMediaType: .video)[0]
+        let size = try await track.load(.naturalSize); expect(size.width == size.height)
+        let restored = ExportQueue(library: library); expect(restored.jobs.count == 1 && restored.jobs[0].status == .completed)
+        let after = try Data(contentsOf: source); expect(after == original)
+    }
+}

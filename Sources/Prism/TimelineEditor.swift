@@ -18,6 +18,8 @@ struct TimelineEditor: View {
     @ViewState<String?> private var issue = nil
     @ViewState<AnnotationKind> private var drawingTool = .arrow
     @ViewState<String> private var captionLanguage = "en-US"
+    @ViewState<Bool> private var savingPreset = false
+    @ViewState<String> private var presetName = ""
     @ViewState<Bool> private var transcribing = false
     @ViewState<Double> private var captionProgress = 0
     @ViewState<Task<Void, Never>?> private var captionTask = nil
@@ -90,6 +92,11 @@ struct TimelineEditor: View {
             saveTask?.cancel(); exportTask?.cancel(); captionTask?.cancel()
             let document = history.document
             Task { do { try await library.saveEdits(recording, document: document) } catch { model.error = error.localizedDescription } }
+        }
+        .alert("Save export preset", isPresented: $savingPreset) {
+            TextField("Preset name", text: $presetName)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { let name = presetName.trimmingCharacters(in: .whitespacesAndNewlines); if !name.isEmpty { model.savedOutputPresets.append(SavedOutputPreset(name: String(name.prefix(80)), aspect: history.document.aspect, quality: quality, format: format)) } }
         }
         .alert("Editor needs attention", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil } })) { Button("OK") { issue = nil } } message: { Text(issue ?? "") }
         .interactiveDismissDisabled(exporting)
@@ -264,9 +271,16 @@ struct TimelineEditor: View {
             Spacer()
             if exporting { ProgressView(value: Double(progress)).frame(width: 90); Button("Cancel") { exportTask?.cancel() }.buttonStyle(QuietButton()) }
             else { ShareLink(item: library.fileURL(recording)) { Image(systemName: "square.and.arrow.up") }.buttonStyle(QuietButton()).help("Share original") }
+            Menu("Presets") {
+                ForEach(OutputPreset.allCases) { preset in Button(preset.rawValue) { if let aspect = preset.aspect { history.change { $0.aspect = aspect } }; quality = preset.quality } }
+                Divider()
+                ForEach(model.savedOutputPresets) { preset in Button(preset.name) { history.change { $0.aspect = preset.aspect }; quality = preset.quality; format = preset.format } }
+                Button("Save current preset…") { presetName = "My export"; savingPreset = true }
+            }.font(.system(size: 11)).disabled(exporting)
+            Button("Queue") { queueExport() }.buttonStyle(QuietButton()).disabled(exporting || model.phase.isActive)
             Picker("Quality", selection: $quality) { ForEach(ExportQuality.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 150).disabled(exporting)
             Picker("Format", selection: $format) { ForEach(VideoFormat.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 70).disabled(exporting)
-            Button { export() } label: { Label(exporting ? "Exporting…" : "Export edited copy", systemImage: "square.and.arrow.up") }.buttonStyle(PrimaryButton()).disabled(exporting)
+            Button { export() } label: { Label(exporting ? "Exporting…" : "Export edited copy", systemImage: "square.and.arrow.up") }.buttonStyle(PrimaryButton()).disabled(exporting || model.phase.isActive)
         }
     }
     private func cutBinding(_ id: UUID, isEnd: Bool) -> Binding<Double> {
@@ -312,6 +326,12 @@ struct TimelineEditor: View {
             let item = AVPlayerItem(asset: timeline.asset); item.videoComposition = timeline.video; item.audioMix = timeline.audio
             player.replaceCurrentItem(with: item); await player.seek(to: CMTime(seconds: time, preferredTimescale: 60000)); if playing { player.play() }
         } catch is CancellationError {} catch { if !Task.isCancelled { issue = error.localizedDescription } }
+    }
+    private func queueExport() {
+        let panel = NSSavePanel(); panel.allowedContentTypes = format == .mp4 ? [.mpeg4Movie] : [.quickTimeMovie]; panel.nameFieldStringValue = recording.title + " — edited." + format.ext
+        guard panel.runModal() == .OK, let target = panel.url else { return }
+        do { try model.exports.enqueue(recording: recording, target: target, document: history.document, quality: quality, format: format); model.exports.start(); dismiss(); model.destination = .exports }
+        catch { issue = error.localizedDescription }
     }
     private func export() {
         player.pause(); exporting = true; progress = 0

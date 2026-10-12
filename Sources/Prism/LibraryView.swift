@@ -10,6 +10,13 @@ struct LibraryView: View {
     @ViewState<Recording?> private var renaming = nil
     @ViewState<String> private var renameTitle = ""
     @ViewState<Bool> private var importing = false
+    @ViewState<Bool> private var selecting = false
+    @ViewState<Set<UUID>> private var selectedIDs = []
+    @ViewState<Bool> private var organizing = false
+    @ViewState<Bool> private var trashingSelected = false
+    @ViewState<String> private var projectName = ""
+    @ViewState<String> private var tagNames = ""
+    @ViewState<OutputPreset> private var batchPreset = .current
     private let columns = [GridItem(.adaptive(minimum: 245, maximum: 400), spacing: 18)]
     var body: some View {
         ScrollView {
@@ -21,6 +28,7 @@ struct LibraryView: View {
                             .font(.system(size: 12)).foregroundStyle(Color.muted)
                     }
                     Spacer()
+                    Button(selecting ? "Done" : "Select") { selecting.toggle(); if !selecting { selectedIDs = [] } }.buttonStyle(QuietButton()).disabled(model.phase.isActive || library.isBusy)
                     Button {
                         importing = true
                         Task { do { try await library.importVideos() } catch { model.error = error.localizedDescription }; importing = false }
@@ -33,6 +41,7 @@ struct LibraryView: View {
                         if !model.search.isEmpty { Button { model.search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Color.muted).padding(3) }.buttonStyle(InteractiveButton(radius: 5)) }
                     }.padding(12).background(Color.surface, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.line)).frame(maxWidth: 350)
                     Spacer()
+                    Picker("Project", selection: $model.projectFilter) { Text("All projects").tag(""); ForEach(library.projects, id: \.self) { Text($0).tag($0) } }.labelsHidden().frame(width: 130)
                     Button { model.favoritesOnly.toggle() } label: {
                         Label("Favorites", systemImage: model.favoritesOnly ? "star.fill" : "star").foregroundStyle(model.favoritesOnly ? Color.accent : Color.muted)
                     }.buttonStyle(QuietButton()).accessibilityValue(model.favoritesOnly ? "Selected" : "Off")
@@ -43,6 +52,18 @@ struct LibraryView: View {
                             catch { model.error = error.localizedDescription }
                         } }
                     } label: { Image(systemName: "ellipsis.circle").foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).fixedSize().disabled(library.isBusy || model.phase.isActive)
+                }
+                if selecting {
+                    HStack(spacing: 10) {
+                        Text("\(selectedIDs.count) selected").font(.system(size: 11, weight: .semibold))
+                        Button("All visible") { selectedIDs = Set(model.filteredRecordings.map(\.id)) }.buttonStyle(QuietButton())
+                        Button("Organize") { projectName = ""; tagNames = ""; organizing = true }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty)
+                        Button("Favorite") { model.report { try library.setFavorite(ids: selectedIDs, value: true) } }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty)
+                        Picker("Output preset", selection: $batchPreset) { ForEach(OutputPreset.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 130)
+                        Button("Export selected…") { batchExport() }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty || model.phase.isActive)
+                        Spacer()
+                        Button { trashingSelected = true } label: { Image(systemName: "trash") }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty)
+                    }.card(padding: 12)
                 }
                 if let notice = library.notice {
                     HStack { Image(systemName: "info.circle").foregroundStyle(Color.orange); Text(notice).font(.system(size: 11)).foregroundStyle(Color.muted); Spacer(); Button { library.notice = nil } label: { Image(systemName: "xmark").padding(4) }.buttonStyle(InteractiveButton(radius: 5)) }.card(padding: 14)
@@ -63,14 +84,15 @@ struct LibraryView: View {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
                         ForEach(model.filteredRecordings) { recording in
                             VStack(alignment: .leading, spacing: 0) {
-                                Button { selected = recording } label: {
+                                Button { if selecting { if selectedIDs.contains(recording.id) { selectedIDs.remove(recording.id) } else { selectedIDs.insert(recording.id) } } else { selected = recording } } label: {
                                     ZStack(alignment: .bottomTrailing) {
                                         RoundedRectangle(cornerRadius: 10).fill(Color.elevated)
                                         RecordingThumbnail(recording: recording)
                                         Image(systemName: "play.circle.fill").font(.system(size: 33)).foregroundStyle(.white.opacity(0.9)).shadow(radius: 5).frame(maxWidth: .infinity, maxHeight: .infinity)
                                         Text(RecordingMath.clock(recording.duration)).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(.white).padding(6).background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 5)).padding(8)
+                                        if selecting { Image(systemName: selectedIDs.contains(recording.id) ? "checkmark.circle.fill" : "circle").font(.system(size: 22)).foregroundStyle(selectedIDs.contains(recording.id) ? Color.accent : Color.white).padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading) }
                                     }.frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 10))
-                                }.buttonStyle(InteractiveButton(radius: 10)).accessibilityLabel("Play and trim \(recording.title)")
+                                }.buttonStyle(InteractiveButton(radius: 10)).disabled(model.phase.isActive).accessibilityLabel("Play and trim \(recording.title)")
                                 HStack(alignment: .top) {
                                     VStack(alignment: .leading, spacing: 7) {
                                         Text(recording.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
@@ -87,6 +109,8 @@ struct LibraryView: View {
                                     } label: { Image(systemName: "ellipsis").font(.system(size: 14)).foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).fixedSize().disabled(library.isBusy)
                                 }.padding(.top, 14)
                                 HStack { Chip(title: "\(recording.width) × \(recording.height)", color: .muted); Spacer(); if recording.favorite { Image(systemName: "star.fill").foregroundStyle(Color.accent).font(.system(size: 10)) }; Text(recording.bytes.fileSize).font(.system(size: 10)).foregroundStyle(Color.muted) }.padding(.top, 13)
+                                if let project = recording.project { Text(project).font(.system(size: 10, weight: .medium)).foregroundStyle(Color.accent).padding(.top, 8) }
+                                if let tags = recording.tags, !tags.isEmpty { Text(tags.joined(separator: " · ")).font(.system(size: 9)).foregroundStyle(Color.muted).lineLimit(1).padding(.top, 5) }
                             }.card(padding: 12)
                         }
                     }
@@ -96,6 +120,15 @@ struct LibraryView: View {
                 .animation(PrismMotion.selection(reduceMotion), value: model.librarySort)
         }
         .onChange(of: model.destination) { _, destination in if destination != .library { selected = nil; renaming = nil; deleting = nil } }
+        .alert("Organize selected recordings", isPresented: $organizing) {
+            TextField("Project", text: $projectName); TextField("Tags, separated by commas", text: $tagNames)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { model.report { try library.organize(ids: selectedIDs, project: projectName, tags: tagNames) } }
+        }
+        .alert("Move selected recordings to Trash?", isPresented: $trashingSelected) {
+            Button("Cancel", role: .cancel) {}
+            Button("Move to Trash", role: .destructive) { let ids = selectedIDs; Task { do { try await library.trash(ids: ids); selectedIDs = [] } catch { model.error = error.localizedDescription } } }
+        }
         .sheet(item: $selected) { recording in TimelineEditor(recording: recording).environmentObject(model).environmentObject(library).preferredColorScheme(model.colorScheme) }
         .alert("Rename recording", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Recording name", text: $renameTitle)
@@ -107,6 +140,13 @@ struct LibraryView: View {
             Button("Move to Trash", role: .destructive) { if let deleting { model.report { try library.delete(deleting) } }; deleting = nil }
         } message: { Text("You can recover the video from your Mac’s Trash.") }
     }
+    private func batchExport() {
+        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true; panel.message = "Choose a folder for edited copies. Your originals remain in the library."
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        let recordings = library.recordings.filter { selectedIDs.contains($0.id) }
+        Task { do { try await model.exports.enqueue(recordings: recordings, folder: folder, preset: batchPreset); model.exports.start(); model.destination = .exports } catch { model.error = error.localizedDescription } }
+    }
+
 }
 
 /// Use AVKit's AppKit player directly, with stable native transport controls.

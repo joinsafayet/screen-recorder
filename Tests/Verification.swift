@@ -313,6 +313,8 @@ func unwrap<T>(_ value: T?) throws -> T {
             ("Timeline cuts, crop export, persistence, and cancellation", { try await suite.testTimelineExportCutsCropAndEditPersistence() }),
             ("Shortcut privacy and edited caption timing", { suite.testShortcutFilteringAndCaptionRemapping() }),
             ("Presentation rendering and pointer interpolation", { try suite.testPresentationRasterAndPointerInterpolation() }),
+            ("Project tags and batch favorites persist", { try await suite.testLibraryOrganizationAndBatchFavorites() }),
+            ("Export queue capture priority and persistence", { try await suite.testExportQueueCapturePriorityAndPersistence() }),
             ("Duration formatting", { suite.testClockHandlesLongAndNegativeDurations() }),
             ("Pause removal and static-screen tail", { try await suite.testVideoWriterRemovesPauseAndRetainsStaticTail() }),
             ("Empty recording failure", { try await suite.testEmptyWriterReportsFailureInsteadOfSavingBrokenVideo() }),

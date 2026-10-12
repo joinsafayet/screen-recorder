@@ -14,7 +14,7 @@ final class AppModel: ObservableObject {
             if oldValue.mode != settings.mode || oldValue.showCursor != settings.showCursor { schedulePreview() }
         }
     }
-    @Published var phase: CapturePhase = .idle
+    @Published var phase: CapturePhase = .idle { didSet { exports.setCaptureActive(phase.isActive) } }
     let telemetry = RecordingTelemetry()
     let preparation = PreparationMonitor()
     @Published var preparingPreview = false
@@ -28,6 +28,10 @@ final class AppModel: ObservableObject {
     var elapsed: Double { telemetry.elapsed }
     @Published var sessionTitle = ""
     @Published var librarySort: LibrarySort = .newest
+    @Published var projectFilter = ""
+    @Published var savedOutputPresets: [SavedOutputPreset] = [] {
+        didSet { if let data = try? JSONEncoder().encode(savedOutputPresets) { UserDefaults.standard.set(data, forKey: "outputPresets") } }
+    }
     @Published var hotkeyStatus = ""
     @Published var globalShortcuts: Bool = UserDefaults.standard.object(forKey: "globalShortcuts") as? Bool ?? true {
         didSet { UserDefaults.standard.set(globalShortcuts, forKey: "globalShortcuts"); configureHotkeys() }
@@ -68,6 +72,7 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(motionEnabled, forKey: "motionEnabled") }
     }
     let library: LibraryStore
+    let exports: ExportQueue
     private var engine: CaptureEngine?
     private var timer: Timer?
     private var activeStart: TimeInterval?
@@ -90,8 +95,11 @@ final class AppModel: ObservableObject {
     var openStudioWindow: (() -> Void)?
 
     init(library: LibraryStore? = nil, discoverSources: Bool = true) {
-        self.library = library ?? LibraryStore()
+        let selectedLibrary = library ?? LibraryStore()
+        self.library = selectedLibrary
+        self.exports = ExportQueue(library: selectedLibrary)
         settings = UserDefaults.standard.data(forKey: "captureSettings").flatMap { try? JSONDecoder().decode(CaptureSettings.self, from: $0) } ?? CaptureSettings()
+        savedOutputPresets = UserDefaults.standard.data(forKey: "outputPresets").flatMap { try? JSONDecoder().decode([SavedOutputPreset].self, from: $0) } ?? []
         savedRegions = UserDefaults.standard.data(forKey: "savedRegions").flatMap { try? JSONDecoder().decode([SavedRegion].self, from: $0) } ?? []
         configureHotkeys()
         refreshPermissions()
@@ -113,7 +121,11 @@ final class AppModel: ObservableObject {
     var recordingCount: Int { library.recordings.count }
     var colorScheme: ColorScheme? { theme == "System" ? nil : theme == "Light" ? .light : .dark }
     var filteredRecordings: [Recording] {
-        let matches = library.recordings.filter { (!favoritesOnly || $0.favorite) && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) || $0.source.localizedCaseInsensitiveContains(search)) }
+        let matches = library.recordings.filter { recording in
+            (!favoritesOnly || recording.favorite) && (projectFilter.isEmpty || recording.project == projectFilter)
+                && (search.isEmpty || recording.title.localizedCaseInsensitiveContains(search) || recording.source.localizedCaseInsensitiveContains(search)
+                    || (recording.project ?? "").localizedCaseInsensitiveContains(search) || (recording.tags ?? []).contains { $0.localizedCaseInsensitiveContains(search) })
+        }
         return matches.sorted { a, b in
             switch librarySort {
             case .newest: return a.createdAt > b.createdAt
@@ -300,6 +312,7 @@ final class AppModel: ObservableObject {
             phase = .preparing
             do {
                 await stopPreparation()
+                await exports.waitUntilIdle()
                 refreshPermissions()
                 guard canCapture else { throw PrismError.message("Allow Screen Recording access first. You can do this in Preferences → Permissions.") }
                 if settings.microphone, !microphoneAccess {

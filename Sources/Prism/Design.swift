@@ -193,6 +193,7 @@ struct RootView: View {
                 ZStack {
                     page(.studio) { StudioView() }
                     page(.library) { LibraryView() }
+                    page(.exports) { ExportQueueView() }
                     page(.settings) { PreferencesView() }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -221,6 +222,7 @@ struct RootView: View {
         }
         .environment(\.prismReduceMotion, reduceMotion)
         .environmentObject(model.preparation)
+        .environmentObject(model.exports)
     }
     private func page<Content: View>(_ destination: Destination, @ViewBuilder content: () -> Content) -> some View {
         content().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -250,7 +252,7 @@ struct SidebarView: View {
                 }
             }.padding(.bottom, 38)
             SectionTitle(text: "Create").padding(.horizontal, 10).padding(.bottom, 14)
-            ForEach([Destination.studio, .library]) { item in navItem(item) }
+            ForEach([Destination.studio, .library, .exports]) { item in navItem(item) }
             SectionTitle(text: "Workspace").padding(.horizontal, 10).padding(.top, 30).padding(.bottom, 14)
             navItem(.settings)
             Button {

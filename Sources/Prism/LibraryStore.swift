@@ -34,6 +34,8 @@ final class LibraryStore: ObservableObject {
 
     func fileURL(_ recording: Recording) -> URL { folder.appendingPathComponent(recording.filename) }
     func thumbnailURL(_ recording: Recording) -> URL? { recording.thumbnail.map { metadataURL.deletingLastPathComponent().appendingPathComponent($0) } }
+    var supportDirectory: URL { metadataURL.deletingLastPathComponent() }
+    var projects: [String] { Array(Set(recordings.compactMap(\.project).filter { !$0.isEmpty })).sorted() }
     var countLabel: String { "\(recordings.count) recording\(recordings.count == 1 ? "" : "s")" }
     var totalBytes: Int64 { recordings.reduce(0) { $0 + $1.bytes } }
     var totalDuration: Double { recordings.reduce(0) { $0 + $1.duration } }
@@ -113,6 +115,36 @@ final class LibraryStore: ObservableObject {
     func favorite(_ recording: Recording) throws {
         guard let i = recordings.firstIndex(where: { $0.id == recording.id }) else { return }
         var next = recordings; next[i].favorite.toggle(); try commit(next)
+    }
+
+    func organize(ids: Set<UUID>, project: String, tags: String) throws {
+        let project = String(project.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+        let tags = Array(Set(tags.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40)) }.filter { !$0.isEmpty })).sorted()
+        var next = recordings
+        for index in next.indices where ids.contains(next[index].id) { next[index].project = project.isEmpty ? nil : project; next[index].tags = Array(tags.prefix(20)) }
+        try commit(next)
+    }
+    func setFavorite(ids: Set<UUID>, value: Bool) throws {
+        var next = recordings; for index in next.indices where ids.contains(next[index].id) { next[index].favorite = value }; try commit(next)
+    }
+    func trash(ids: Set<UUID>) async throws {
+        guard !isBusy else { return }; isBusy = true; defer { isBusy = false }
+        let selected = recordings.filter { ids.contains($0.id) }, folder = folder
+        let moved = try await Task.detached(priority: .utility) { () throws -> [(URL, URL)] in
+            var moved: [(URL, URL)] = []
+            do {
+                for recording in selected {
+                    let url = folder.appendingPathComponent(recording.filename)
+                    guard FileManager.default.fileExists(atPath: url.path) else { continue }
+                    var target: NSURL?; try FileManager.default.trashItem(at: url, resultingItemURL: &target)
+                    if let target { moved.append((url, target as URL)) }
+                }
+                return moved
+            } catch { for pair in moved.reversed() { try? FileManager.default.moveItem(at: pair.1, to: pair.0) }; throw error }
+        }.value
+        do { try commit(recordings.filter { !ids.contains($0.id) }) }
+        catch { await Task.detached(priority: .utility) { for pair in moved.reversed() { try? FileManager.default.moveItem(at: pair.1, to: pair.0) } }.value; throw error }
+        for recording in selected { if let thumb = thumbnailURL(recording) { thumbnailCache.removeObject(forKey: thumb as NSURL); try? FileManager.default.removeItem(at: thumb) } }
     }
 
     func delete(_ recording: Recording) throws {
@@ -213,10 +245,15 @@ final class LibraryStore: ObservableObject {
         let url = metadataURL.deletingLastPathComponent().appendingPathComponent("edits-" + recording.id.uuidString + ".json")
         try await Task.detached(priority: .utility) { try Task.checkCancellation(); try JSONEncoder().encode(document).write(to: url, options: .atomic) }.value
     }
+    func validateExportTarget(_ target: URL) throws {
+        let location = target.standardizedFileURL.resolvingSymlinksInPath()
+        guard !recordings.contains(where: { fileURL($0).standardizedFileURL.resolvingSymlinksInPath() == location }) else { throw PrismError.message("Choose another filename to preserve the originals in your library.") }
+    }
     func exportTimeline(_ recording: Recording, document: TimelineDocument, format: VideoFormat, quality: ExportQuality, progress: @escaping (Float) -> Void) async throws {
         let panel = NSSavePanel(); panel.allowedContentTypes = format == .mp4 ? [.mpeg4Movie] : [.quickTimeMovie]
         panel.nameFieldStringValue = recording.title + " — edited." + format.ext
         guard panel.runModal() == .OK, let target = panel.url else { return }
+        try validateExportTarget(target)
         try await TimelineRenderer.export(source: fileURL(recording), target: target, document: document, format: format, quality: quality, progress: progress)
     }
 
