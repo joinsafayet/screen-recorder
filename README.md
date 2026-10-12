@@ -1,83 +1,109 @@
-# Prism 3 — Screen Studio
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/hero-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/media/hero-light.png">
+    <img src="docs/media/hero-dark.png" alt="Prism — Capture clearly. Edit precisely. A native recording studio for macOS." width="100%">
+  </picture>
 
-A native macOS recording studio with adjustable capture areas, a non-destructive editor, presentation tools, and a local recording library. Built with SwiftUI, ScreenCaptureKit, Core Image, and AVFoundation. Requires macOS 15 or later; the supplied package targets Apple Silicon.
+  <p><strong>A focused studio for recording, editing, and presenting your screen.</strong></p>
+  <p>macOS 15+ &nbsp; · &nbsp; Apple Silicon &nbsp; · &nbsp; SwiftUI &nbsp; · &nbsp; Local storage</p>
+  <p>
+    <a href="https://github.com/joinsafayet/screen-recorder/releases/download/v3.0.1/Prism-macOS.zip"><strong>Download Prism 3.0.1</strong></a>
+    &nbsp; / &nbsp;
+    <a href="docs/USER_GUIDE.md">User guide</a>
+    &nbsp; / &nbsp;
+    <a href="CHANGELOG.md">What’s new</a>
+    &nbsp; / &nbsp;
+    <a href="https://github.com/joinsafayet/screen-recorder/actions/workflows/macos.yml">Build & tests</a>
+  </p>
+</div>
 
-## Run
+---
 
-Open **build/Prism.app** in Finder, or unpack **build/Prism-macOS.zip**. Use **Choose with macOS** to select a source through the system picker, or **Set up recording** for screen access. Grant microphone/camera access when those devices are enabled. macOS may require restarting Prism after changing screen permissions. The package is signed locally for development; it is not notarized.
+## A clear frame for your next idea
 
-## Identity
+Prism records displays, windows, and precise areas, then helps you shape the take with a saved timeline. Capture narration and a presenter bubble, add captions and annotations, and export a polished copy while preserving the original.
 
-Prism uses a folded P capture-aperture mark in cobalt and sea green, with a navy macOS icon tile. A 30-glyph native vector family covers navigation, capture, audio, preparation, and editing tools; small glyphs simplify below 16 points. Brand assets, palette, and artwork prompts are in [the brand guide](Assets/Brand/README.md).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/studio-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/media/studio-light.png">
+  <img src="docs/media/studio-dark.png" alt="Prism recording studio with a source preview, capture presets, and a resizable video/audio/camera inspector" width="100%">
+</picture>
 
-## Recording studio
+<sub>Interface previews use Prism’s actual views and a generated sample recording. The editor preview includes a decoded sample still.</sub>
 
-- Resizable sidebar and recording inspector, a larger source preview, and a compact layout with settings in a separate panel.
-- Dark, light, and system appearances with blue, teal, amber, and coral accents. Short, interruptible selection and button animations respect Reduce Motion and the Interface motion preference.
-- Entire displays, windows, or custom areas, including the native macOS source picker. Area selection supports moving, eight resize handles, aspect ratios, arrow-key nudging, Enter/Escape, and saved areas.
-- Everyday, Tutorial, Smooth motion, and Detail presets. 720p, 1080p, 4K, and native resolution; 24/30/60 fps; H.264/HEVC; MP4/MOV. Small sources are never enlarged.
-- System audio and selected microphone, with mixing levels. A mirrored presenter bubble supports adjustable size and four positions.
-- Opt-in preparation preview with actual camera frames, microphone/system meters, storage estimates, and a five-second test take.
-- Session titles, countdown cancellation, pause/resume, timed stop, markers, floating controls, and menu-bar controls. For system-picked display capture, Prism hides its windows and uses the menu bar.
-- Capture telemetry shows saved frames, encoder/audio drops, dimensions, and processing time. Background disk checks, low-space stops, and device/display loss handling preserve the take.
-- Ten-second movie fragments and an interrupted-session journal support recovery of completed fragments. Use **Recover recordings** in the library menu. Unreadable files and damaged indexes are preserved; the unfinished tail of a take may be unavailable.
+## Capture → Edit → Present
 
-## Editing and presentation
-
-Open a library clip to edit a saved timeline: split, remove, reorder, or add sections; enter exact in/out points; crop and change aspect; add zoom keyframes and audio fades; undo/redo. Edits save separately from the original video.
-
-Draw arrows and freehand annotations, add timed text, and edit cursor spotlight and shortcut overlays. Shortcut capture is opt-in and needs Input Monitoring. It records modified shortcut combinations, omits plain typing, and stops reading keys while Secure Event Input is enabled. Cursor and shortcut data live in separate metadata files to keep the library index small.
-
-Captions can be entered and edited manually, rendered into a video, or exported as SRT with timing remapped across cuts. Automatic transcription uses Apple's on-device recognizer only and requires Speech permission plus an available local language model. Unsupported languages/devices return an actionable error without sending audio to a cloud recognizer.
-
-Exports include current-edit, widescreen, portrait, square, and small-file presets, plus saved custom presets. Edited copies show progress, support cancellation, and replace a destination only after success. Original library videos are protected as export destinations.
-
-## Library and export queue
-
-Search, favorite, rename, sort, import, reveal, share, and move clips to Trash. Projects and tags organize takes; multi-selection supports batch organization, favorites, Trash, and exports. Thumbnails decode away from the UI thread and use bounded caches.
-
-The persistent export queue saves a snapshot of each edit and processes one job at a time. Pause, cancel, retry, and inspect completed copies in the Exports workspace. Interrupted jobs return to waiting after restart. Queued exports yield to recording and direct editor exports to limit competing media work.
-
-Videos default to `~/Movies/Prism`. Library metadata, edit documents, presentation data, thumbnails, and the export queue live in `~/Library/Application Support/Prism`. No account is required.
-
-## Shortcuts
-
-Global shortcuts can be enabled in Preferences. Registration conflicts are reported; these hotkeys do not need Accessibility permission.
-
-| Action | Global | With Prism focused |
+| Capture with control | Shape the take | Keep work organized |
 | --- | --- | --- |
-| Start / stop | Control Command R | Command Shift R |
-| Pause / resume | Control Command P | Command Shift P |
-| Add marker | Control Command M | Command Shift M |
-| Library | — | Command L |
-| Preferences | — | Command comma |
-| Toggle sidebar | — | Command Option S |
+| Native macOS source picker | Split, remove, and reorder sections | Projects, tags, and search |
+| Movable, resizable, saved areas | Crop, aspect ratios, and zoom keyframes | Favorites and batch actions |
+| System audio and microphone | Audio levels and fades | Persistent export queue |
+| Presenter bubble and setup meters | Arrows, drawings, and timed text | Saved export presets |
+| Countdown, pause, markers, and test takes | Manual/on-device captions and SRT | Original-file protection |
+| H.264/HEVC, MP4/MOV, up to 4K/60 | Undo/redo and automatic edit saving | Interrupted-fragment recovery |
 
-## Performance
+### A timeline that preserves the source
 
-Capture uses a three-frame ScreenCaptureKit queue, hardware-accelerated encoding, serial media processing, bounded presenter pixel buffers, and throttled telemetry. Camera previews update at most twice per second. Annotation rasters cover their own bounds and use a 32 MB cache. Audio mixing copies compressed video packets to avoid a second video encode.
+![Prism timeline editor with two retained sections, exact in/out controls, undo/redo, markers, and edited-copy export](docs/media/editor.png)
 
-Static screens naturally deliver fewer frames. Processing measurements exclude asynchronous encoding. Actual performance depends on the Mac, source, devices, resolution, codec, disk, and other workloads. The release checks and their limits are documented in [verification](docs/VERIFICATION.md); they do not establish a universal zero-lag guarantee.
+Edits live in separate documents. The export queue saves a snapshot of each edit, processes one job at a time, and yields to capture. Cancellation leaves the existing destination intact.
 
-## Build and verify
+### An interface with its own identity
 
-Apple's command-line developer tools are sufficient. There are no third-party dependencies.
+The folded P mark combines a capture aperture with a refracted edge. Cobalt, sea green, and navy anchor the brand; dark, light, and system appearances support four selectable UI accents. Thirty native vector glyphs share one optical grid, with simpler geometry for tiny controls. Motion stays short, interruptible, and Reduce Motion aware.
+
+<details>
+<summary><strong>Explore the icon family and brand assets</strong></summary>
+
+![Prism’s native vector icon family at three optical sizes](docs/media/icons.png)
+
+[Brand guide and palette](Assets/Brand/README.md) · [Download brand kit](https://github.com/joinsafayet/screen-recorder/releases/download/v3.0.1/Prism-Brand-Kit.zip)
+
+</details>
+
+## Get started
+
+1. Download the [macOS app archive](https://github.com/joinsafayet/screen-recorder/releases/download/v3.0.1/Prism-macOS.zip), unzip it, and move **Prism.app** into Applications.
+2. Open Prism and choose a source with **Choose with macOS**, or use **Set up recording** for screen access.
+3. Enable your microphone/camera if needed, use **Test setup**, then make a **5-second test take**.
+4. Record, open the take in the library, and export an edited copy.
+
+This is an **Apple Silicon development preview**, locally signed and not notarized. Microphone/camera and automatic captions require the relevant permissions and devices. No account is required for recording. Downloads from this private repository require repository access.
+
+[Setup, shortcuts, storage, and permission details →](docs/USER_GUIDE.md)
+
+## Built for sustained recording
+
+ScreenCaptureKit feeds a bounded media queue. Encoding requests hardware acceleration, previews/meters are throttled, and media/file work runs away from the UI. Recovery journals and ten-second movie fragments help restore completed media after interruption.
+
+The local verification suite passes **26 functional/media checks**. A 60-second paced synthetic 4K60 test with presenter composition and dual audio saved **3,600/3,600 source frames with zero video/audio drops**. This measures encoder/compositor throughput; actual source, devices, disks, and workload affect performance. Unlocked live UI/capture and physical-device checks remain documented separately.
+
+[Verification evidence and limits →](docs/VERIFICATION.md)
+
+## Build from source
+
+Apple’s command-line developer tools with a macOS 15+ SDK are sufficient. No third-party package dependencies are required.
 
 ```sh
+git clone https://github.com/joinsafayet/screen-recorder.git
+cd screen-recorder
 scripts/build.sh
 scripts/verify.sh
-scripts/verify.sh --benchmark
-scripts/verify.sh --soak
-scripts/verify.sh --live-benchmark
-scripts/verify.sh --long-live-benchmark
 ```
 
-The 26 functional/media checks exercise decoded video/audio, timeline exports, source preservation, cancellation, index rollback/recovery, MP4/MOV interrupted fragments, regions, saved areas, shortcut filtering, presentation rendering, edited subtitle timing, projects/tags, and queue persistence/priority.
+Outputs: `build/Prism.app`, `build/Prism-macOS.zip`, and `build/SHA256SUMS.txt`. GitHub Actions also builds the app and runs the media checks on macOS. Permission-dependent capture tests run locally on an unlocked Mac.
 
-`--benchmark` runs four paced six-second 1080p/4K 60 fps profiles with/without synthetic presenter frames. `--soak` runs a 60-second 4K60 profile with presenter composition and two synthetic PCM streams. JSON reports are saved under `build/`.
+[Contributing and deeper checks →](CONTRIBUTING.md)
 
-`--live-benchmark` records only the verifier's moving native window for ten seconds through ScreenCaptureKit. `--long-live-benchmark` runs the same capture for two minutes. They require screen access for the terminal host and an unlocked desktop; a locked desktop is explicitly reported as skipped. These tests do not grant permissions or change system privacy settings.
+## Project map
 
-With Prism running, `scripts/verify.sh --capture-smoke` captures only Prism's window and checks pause/resume and playback. `scripts/ui-review.sh` creates an isolated GUI review host. Launch that host with `--render` to produce owned-view layout images and a main-actor interaction report without recording another application's content.
+| Location | Purpose |
+| --- | --- |
+| [`Sources/Prism`](Sources/Prism) | Capture engine, studio, timeline, library, and native UI |
+| [`Tests`](Tests) | Generated-media checks and isolated interface preview host |
+| [`Assets/Brand`](Assets/Brand) | Logo masters, colors, and artwork prompts |
+| [`scripts`](scripts) | Build, packaging, icon pipeline, and verification |
+| [`docs`](docs) | User guide, roadmap, verification, and interface media |
 
-The [roadmap](docs/ROADMAP.md) records the independently committed development phases. Physical camera/microphone, speech permission/model availability, native picker interaction, device unplugging, and unlocked live UI/capture remain device-level release checks.
+[Release notes](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) · [Report a bug](https://github.com/joinsafayet/screen-recorder/issues/new/choose) · [Request a feature](https://github.com/joinsafayet/screen-recorder/issues/new/choose)

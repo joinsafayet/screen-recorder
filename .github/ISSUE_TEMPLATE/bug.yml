@@ -1,0 +1,35 @@
+name: Bug report
+description: Help reproduce a recording, editing, or interface problem.
+title: "[Bug] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Prism version and macOS version
+      placeholder: "Prism 3.0.1 (6), macOS 15.6, Apple Silicon"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the source mode, resolution/frame rate, and enabled devices when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Additional context
+      description: Error text, capture-monitor counts, or a small reproducible sample can help.

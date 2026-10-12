@@ -5,7 +5,7 @@ mkdir -p build/PrismUIReview.app/Contents/MacOS build/PrismUIReview.app/Contents
 cp Assets/Brand/PrismMark.png build/PrismUIReview.app/Contents/Resources/PrismMark.png
 sources=(Sources/Prism/*.swift)
 sources=(${sources:#*PrismApp.swift})
-swiftc -O -parse-as-library -swift-version 5 -target "$(uname -m)-apple-macos15.0" "${sources[@]}" Tests/UIReview.swift -o build/PrismUIReview.app/Contents/MacOS/PrismUIReview
+swiftc -O -parse-as-library -swift-version 5 -target "$(uname -m)-apple-macos15.0" "${sources[@]}" Tests/UIReview.swift Tests/DocumentationMedia.swift -o build/PrismUIReview.app/Contents/MacOS/PrismUIReview
 cat > build/PrismUIReview.app/Contents/Info.plist <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

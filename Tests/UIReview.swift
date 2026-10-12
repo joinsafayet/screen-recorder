@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVFoundation
 
 /// Isolated visual verification host. Its clips, manifest, and defaults do not use the user's library.
 @main struct UIReview {
@@ -11,20 +12,32 @@ import AppKit
         Task { @MainActor in
             do {
                 let build = Bundle.main.bundleURL.deletingLastPathComponent()
-                let root = build.appendingPathComponent("UI-review-assets")
+                let docs = CommandLine.arguments.contains("--docs")
+                let root = docs ? URL(fileURLWithPath: "/tmp/Prism-Documentation") : build.appendingPathComponent("UI-review-assets")
                 let folder = root.appendingPathComponent("Videos")
                 let library = LibraryStore(folder: folder, support: root.appendingPathComponent("Index"))
                 let video = folder.appendingPathComponent("Prism walkthrough.mp4")
                 if !FileManager.default.fileExists(atPath: video.path) {
-                    let sample = build.appendingPathComponent("Prism-live-1080p60.mp4")
-                    try FileManager.default.copyItem(at: sample, to: video)
+                    _ = try await DocumentationMedia.makeVideo(at: video)
                 }
                 if library.recordings.isEmpty {
-                    try await library.add(url: video, source: "Window capture", fps: 60, title: "Prism — product walkthrough",
-                        markers: [RecordingMarker(time: 0.8, title: "Introduction"), RecordingMarker(time: 3.5, title: "Presenter settings"), RecordingMarker(time: 7.4, title: "Export your take")])
+                    try await library.add(url: video, source: "Sample capture", fps: 30, title: "Prism — product walkthrough",
+                        markers: [RecordingMarker(time: 0.8, title: "Frame your source"), RecordingMarker(time: 3, title: "Edit your take"), RecordingMarker(time: 5.1, title: "Export a copy")])
                 }
                 let model = AppModel(library: library, discoverSources: false)
                 model.globalShortcuts = false; model.theme = "Dark"; model.accentChoice = "Blue"; model.motionEnabled = true; model.settings = CaptureSettings(); model.destination = .library
+                if docs {
+                    // Display a sample workspace in this isolated, noninteractive documentation host.
+                    model.displayID = 0; model.screenAccess = true
+                    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: video)); generator.appliesPreferredTrackTransform = true
+                    let frame = try await generator.image(at: CMTime(seconds: 1, preferredTimescale: 600)).image
+                    model.preview = NSImage(cgImage: frame, size: CGSize(width: frame.width, height: frame.height))
+                    if let recording = library.recordings.first {
+                        var document = TimelineDocument(recordingID: recording.id, duration: recording.duration)
+                        document.cuts = [TimelineCut(start: 0, end: 1.8), TimelineCut(start: 2.4, end: min(5.8, recording.duration))]
+                        try await library.saveEdits(recording, document: document)
+                    }
+                }
                 let panel = NSPanel(contentRect: CGRect(x: 340, y: 100, width: 1240, height: 860), styleMask: [.titled, .resizable, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
                 panel.animationBehavior = .none
                 panel.title = "Prism UI Review"; panel.hidesOnDeactivate = false
@@ -46,6 +59,7 @@ private struct ReviewRoot: View {
     @ObservedObject var model: AppModel
     var body: some View {
         RootView().environmentObject(model).environmentObject(model.library).environmentObject(model.telemetry).preferredColorScheme(model.colorScheme)
+            .allowsHitTesting(!CommandLine.arguments.contains("--docs"))
             .overlay(alignment: .topTrailing) {
                 HStack(spacing: 5) {
                     if !CommandLine.arguments.contains("--render") {
@@ -62,6 +76,7 @@ private struct ReviewRoot: View {
     static func renderAssets() async {
         guard let model, let panel else { return }
         let build = Bundle.main.bundleURL.deletingLastPathComponent()
+        let docs = CommandLine.arguments.contains("--docs")
         func capture(_ name: String) {
             guard let view = panel.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
             view.layoutSubtreeIfNeeded(); view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -71,6 +86,18 @@ private struct ReviewRoot: View {
             model.destination = destination
             try? await Task.sleep(for: .milliseconds(500))
             capture("Prism3-render-" + destination.rawValue)
+        }
+        if docs {
+            model.theme = "Light"; model.destination = .studio
+            try? await Task.sleep(for: .milliseconds(500)); capture("Prism3-render-Studio-Light")
+            model.theme = "Dark"
+            panel.setContentSize(CGSize(width: 1600, height: 480))
+            for light in [false, true] {
+                panel.contentView = NSHostingView(rootView: RepositoryHero().preferredColorScheme(light ? .light : .dark))
+                try? await Task.sleep(for: .milliseconds(500)); capture(light ? "Prism-repository-hero-light" : "Prism-repository-hero-dark")
+            }
+            panel.setContentSize(CGSize(width: 1240, height: 860))
+            panel.contentView = NSHostingView(rootView: ReviewRoot(model: model))
         }
         panel.setContentSize(CGSize(width: 940, height: 680))
         for destination in [Destination.studio, .library, .settings] {
@@ -88,13 +115,16 @@ private struct ReviewRoot: View {
         }
         if let recording = model.library.recordings.first {
             panel.setContentSize(CGSize(width: 1060, height: 730))
-            panel.contentView = NSHostingView(rootView: TimelineEditor(recording: recording).environmentObject(model).environmentObject(model.library).preferredColorScheme(.dark))
+            panel.contentView = NSHostingView(rootView: DocumentationEditor(recording: recording, poster: docs ? model.preview : nil).environmentObject(model).environmentObject(model.library).preferredColorScheme(.dark))
             try? await Task.sleep(for: .seconds(1)); capture("Prism3-render-Editor")
         }
+        panel.contentView = NSHostingView(rootView: AboutView().preferredColorScheme(.dark))
+        panel.setContentSize(CGSize(width: 500, height: 480))
+        try? await Task.sleep(for: .milliseconds(500)); capture("Prism3-render-About")
         panel.setContentSize(CGSize(width: 1240, height: 860))
         panel.contentView = NSHostingView(rootView: ReviewRoot(model: model))
         try? await Task.sleep(for: .milliseconds(500))
-        stress()
+        if !docs { stress() }
         try? "Finished owned-view raster review".write(to: build.appendingPathComponent("UI-render-status.txt"), atomically: true, encoding: .utf8)
     }
     static func stress() {
@@ -124,6 +154,19 @@ private struct ReviewRoot: View {
             let file = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("Interaction-performance-report.json")
             try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]).write(to: file)
             model.notify("Interaction test complete · 120 changes")
+        }
+    }
+}
+private struct DocumentationEditor: View {
+    let recording: Recording
+    let poster: NSImage?
+    var body: some View {
+        TimelineEditor(recording: recording).overlay(alignment: .topLeading) {
+            if let poster {
+                // A decoded sample still replaces the unavailable offscreen AVPlayer layer.
+                Image(nsImage: poster).resizable().scaledToFit().frame(width: 649, height: 302)
+                    .background(Color.black).clipShape(RoundedRectangle(cornerRadius: 12)).offset(x: 24, y: 86).allowsHitTesting(false).accessibilityHidden(true)
+            }
         }
     }
 }

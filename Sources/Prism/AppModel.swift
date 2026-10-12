@@ -6,6 +6,7 @@ import AVFoundation
 @MainActor
 final class AppModel: ObservableObject {
     @Published var destination: Destination = .studio
+    @Published var showingAbout = false
     @Published var settings: CaptureSettings {
         didSet {
             if let data = try? JSONEncoder().encode(settings) { UserDefaults.standard.set(data, forKey: "captureSettings") }

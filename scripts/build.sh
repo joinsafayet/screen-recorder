@@ -11,4 +11,5 @@ cp Assets/Brand/PrismMark.png "$app/Contents/Resources/PrismMark.png"
 iconutil -c icns build/AppIcon.iconset -o "$app/Contents/Resources/AppIcon.icns"
 codesign --force --deep --sign - "$app"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$PWD/build/Prism-macOS.zip"
+(cd build && shasum -a 256 Prism-macOS.zip > SHA256SUMS.txt)
 echo "Built $app"

@@ -95,6 +95,17 @@ struct PreferencesView: View {
                         Text("\(model.hotkeyStatus). Focused shortcuts: ⌘ ⇧ R to record, ⌘ ⇧ P to pause.").font(.system(size: 10)).foregroundStyle(Color.muted).lineSpacing(3)
                     }.frame(width: 285).card()
                 }
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 14) {
+                    PrismBrandBadge(size: 36)
+                    VStack(alignment: .leading, spacing: 5) { Text("Prism \(AppInfo.version)").font(.system(size: 13, weight: .semibold)); Text("Native recording, editing, and presentation.").font(.system(size: 11)).foregroundStyle(Color.muted) }
+                    Spacer()
+                    }
+                    HStack(spacing: 12) {
+                    Button("About Prism") { model.showingAbout = true }.buttonStyle(QuietButton()).disabled(model.phase.isActive)
+                    Link("Downloads", destination: AppInfo.releasesURL).buttonStyle(QuietButton())
+                    }
+                }.card()
             }.padding(30)
         }
         }

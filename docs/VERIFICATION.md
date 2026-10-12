@@ -55,3 +55,9 @@ The final session's desktop was locked. The long live benchmark reported **SKIP*
 The branding update adds the folded P raster mark, an exact-size ICNS pipeline, and 30 native vector glyphs. All 26 functional/media checks passed again (`build/branding-verification.log`). The isolated host rendered and reviewed dark/light icon contact sheets at 12/18/28 points, the compact studio, preferences, library, exports, and editor. It completed the 120-action layout run with 39.63 ms mean mutation/layout time and 73.90 ms maximum while the desktop was locked; this does not measure visible animation FPS.
 
 The package uses bundle build 5. The icon representations retain alpha at exact 16/32/64/128/256/512/1024 dimensions, and the packaged logo matches the source artwork. Full colors and generation prompts are in [the brand guide](../Assets/Brand/README.md). Branding assets load once; vector glyphs add no idle loop.
+
+## 3.0.1 repository and app update
+
+The 3.0.1 release uses bundle build 6 and adds About/download entry points plus export-aware application shutdown. All 26 functional/media checks passed (`build/repository-verification.log`). The arm64 app, local signature, bundle metadata, ZIP contents, and SHA-256 checksum were verified. The previous idle app process was closed after checking for active recording journals/export jobs, and the updated bundle was launched. User recordings and preferences were preserved.
+
+Repository images are rendered from actual Prism views in an isolated, noninteractive host with generated sample media. The editor image uses a decoded sample still because native AVPlayer layers cannot render on the locked desktop. Documentation mode does not test or grant screen permission. The preview host can now generate its sample clip on a fresh checkout. Native physical-device and unlocked live-capture checks remain pending as described above.

@@ -21,6 +21,9 @@ struct PrismApp: App {
         .defaultSize(width: 1240, height: 860)
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Prism") { model.showingAbout = true; model.showMainWindow() }.disabled(model.phase.isActive)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Recording") { model.destination = .studio; model.showMainWindow() }.keyboardShortcut("n")
             }
@@ -70,10 +73,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if let model = AppContext.model, model.phase.isCapturing {
-            Task { @MainActor in await model.stopRecording(); NSApp.reply(toApplicationShouldTerminate: true) }
+            model.exports.pause()
+            Task { @MainActor in await model.stopRecording(); await model.exports.waitUntilIdle(); await model.exports.flush(); NSApp.reply(toApplicationShouldTerminate: true) }
             return .terminateLater
         }
         if AppContext.model?.phase.isActive == true { return .terminateCancel }
+        if let model = AppContext.model, model.editorExporting || model.library.isBusy {
+            model.error = "Finish or cancel the current export or library update before quitting Prism."
+            return .terminateCancel
+        }
+        if let model = AppContext.model {
+            model.exports.pause()
+            Task { @MainActor in await model.exports.waitUntilIdle(); await model.exports.flush(); NSApp.reply(toApplicationShouldTerminate: true) }
+            return .terminateLater
+        }
         return .terminateNow
     }
 }

@@ -230,6 +230,7 @@ struct RootView: View {
         .alert("Something needs your attention", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
             Button("OK", role: .cancel) { model.error = nil }
         } message: { Text(model.error ?? "") }
+        .sheet(isPresented: $model.showingAbout) { AboutView() }
         .onAppear { AppContext.model = model; model.openStudioWindow = { [openWindow] in openWindow(id: "prism-studio") } }
         .onChange(of: model.destination) { _, destination in model.mainWindow?.makeFirstResponder(nil); if destination != .studio { Task { await model.stopPreparation() } } }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
