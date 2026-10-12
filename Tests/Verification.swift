@@ -311,6 +311,8 @@ func unwrap<T>(_ value: T?) throws -> T {
             ("Interrupted fragment playback and restoration", { try await suite.testInterruptedFragmentIsPlayableAndRecoverable() }),
             ("Timeline history, crop geometry, and validation", { try suite.testTimelineHistoryGeometryAndValidation() }),
             ("Timeline cuts, crop export, persistence, and cancellation", { try await suite.testTimelineExportCutsCropAndEditPersistence() }),
+            ("Shortcut privacy and edited caption timing", { suite.testShortcutFilteringAndCaptionRemapping() }),
+            ("Presentation rendering and pointer interpolation", { try suite.testPresentationRasterAndPointerInterpolation() }),
             ("Duration formatting", { suite.testClockHandlesLongAndNegativeDurations() }),
             ("Pause removal and static-screen tail", { try await suite.testVideoWriterRemovesPauseAndRetainsStaticTail() }),
             ("Empty recording failure", { try await suite.testEmptyWriterReportsFailureInsteadOfSavingBrokenVideo() }),

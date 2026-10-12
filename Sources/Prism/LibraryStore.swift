@@ -59,7 +59,7 @@ final class LibraryStore: ObservableObject {
     }
 
     @discardableResult
-    func add(url: URL, source: String, fps: Int, title: String? = nil, markers: [RecordingMarker] = []) async throws -> Recording {
+    func add(url: URL, source: String, fps: Int, title: String? = nil, markers: [RecordingMarker] = [], pointers: [PointerSample] = [], shortcuts: [ShortcutSample] = [], spotlight: Bool = false) async throws -> Recording {
         let support = metadataURL.deletingLastPathComponent()
         let recording = try await Task.detached(priority: .utility) {
             let asset = AVURLAsset(url: url)
@@ -84,7 +84,7 @@ final class LibraryStore: ObservableObject {
             }
             return Recording(id: id, filename: url.lastPathComponent, title: title ?? url.deletingPathExtension().lastPathComponent,
                 createdAt: Date(), duration: duration, bytes: bytes, width: Int(abs(visibleSize.width)), height: Int(abs(visibleSize.height)),
-                fps: fps > 0 ? fps : Int(rate.rounded()), source: source, thumbnail: thumbnail, markers: markers)
+                fps: fps > 0 ? fps : Int(rate.rounded()), source: source, thumbnail: thumbnail, markers: markers, pointers: pointers, shortcuts: shortcuts, captureSpotlight: spotlight)
         }.value
         do { try commit([recording] + recordings) }
         catch { if let thumb = thumbnailURL(recording) { try? FileManager.default.removeItem(at: thumb) }; throw error }
@@ -178,7 +178,7 @@ final class LibraryStore: ObservableObject {
                 let asset = AVURLAsset(url: url); let duration = try await asset.load(.duration).seconds
                 let markers = journal.markers.filter { $0.time >= 0 && $0.time < duration }
                 try await add(url: url, source: journal.source, fps: journal.settings.fps,
-                    title: journal.title.isEmpty ? "Recovered recording" : journal.title + " — recovered", markers: markers)
+                    title: journal.title.isEmpty ? "Recovered recording" : journal.title + " — recovered", markers: markers, pointers: journal.pointers ?? [], shortcuts: journal.shortcuts ?? [], spotlight: journal.settings.cursorSpotlight)
                 try await recoveryStore.complete(journal.id); known.insert(journal.filename); recovered += 1
             } catch { notice = "Some interrupted files have no readable fragment yet. They remain in your save folder." }
         }

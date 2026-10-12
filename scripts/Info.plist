@@ -13,6 +13,7 @@
     <key>NSMicrophoneUsageDescription</key><string>Prism uses your microphone to add your narration to recordings you start.</string>
     <key>NSCameraUsageDescription</key><string>Prism uses your camera to add an optional presenter bubble to recordings you start.</string>
     <key>NSAudioCaptureUsageDescription</key><string>Prism records audio from your Mac when you enable system audio.</string>
+    <key>NSSpeechRecognitionUsageDescription</key><string>Prism generates optional captions from your recordings using on-device speech recognition. Your audio stays on your Mac.</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict></plist>

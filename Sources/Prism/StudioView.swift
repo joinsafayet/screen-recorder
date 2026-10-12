@@ -125,6 +125,9 @@ struct RecordingInspector: View {
                         Picker("Countdown", selection: $model.settings.countdown) { Text("None").tag(0); ForEach([3, 5, 10], id: \.self) { Text("\($0) seconds").tag($0) } }
                         Toggle("Show cursor", isOn: $model.settings.showCursor)
                         Toggle("Click highlights", isOn: $model.settings.highlightClicks)
+                        Toggle("Record cursor spotlight", isOn: $model.settings.cursorSpotlight)
+                        Toggle("Display keyboard shortcuts", isOn: $model.settings.showKeystrokes)
+                        Text("Presentation effects are editable in the timeline. Shortcut capture needs Input Monitoring and omits plain typing.").font(.system(size: 10)).foregroundStyle(Color.muted)
                         Picker("Auto stop", selection: $model.settings.stopAfterMinutes) { Text("Until I stop").tag(0); ForEach([1, 5, 10, 15, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) } }
                         Toggle("Hide main window", isOn: $model.settings.hideWindow)
                         Toggle("Floating controls", isOn: $model.settings.showFloatingControls)

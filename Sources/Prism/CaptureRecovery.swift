@@ -9,6 +9,8 @@ struct CaptureJournal: Codable, Equatable {
     var createdAt = Date()
     var activeDuration: Double = 0
     var markers: [RecordingMarker] = []
+    var pointers: [PointerSample]?
+    var shortcuts: [ShortcutSample]?
     func mediaURL(in folder: URL) -> URL? {
         guard filename == URL(fileURLWithPath: filename).lastPathComponent,
               ["mp4", "mov"].contains(URL(fileURLWithPath: filename).pathExtension.lowercased()) else { return nil }

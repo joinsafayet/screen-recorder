@@ -22,6 +22,9 @@ final class AppModel: ObservableObject {
     @Published var estimateMinutes = 10
     private var preparationTask: Task<Void, Never>?
     private var testTakeSeconds = 0
+    private let presentation = PresentationSession()
+    private var presentationBounds = CGRect.zero
+    private var presentationWindowID: CGWindowID?
     var elapsed: Double { telemetry.elapsed }
     @Published var sessionTitle = ""
     @Published var librarySort: LibrarySort = .newest
@@ -311,6 +314,12 @@ final class AppModel: ObservableObject {
                 guard freeBytes == nil || freeBytes! > 500_000_000 else { throw PrismError.message("Free at least 500 MB in your save location before recording.") }
                 let (filter, display, size) = try await makeFilter()
                 let options = settings
+                try PresentationSession.checkPermission(enabled: options.showKeystrokes)
+                presentationWindowID = options.mode == .window ? selectedWindow?.windowID : nil
+                if #available(macOS 15.2, *), let pickedFilter, pickedFilter.style == .window { presentationWindowID = pickedFilter.includedWindows.first?.windowID }
+                if let window = selectedWindow, options.mode == .window { presentationBounds = window.frame }
+                else { presentationBounds = CGDisplayBounds(displayID) }
+                if options.mode == .region, let region { presentationBounds = RecordingMath.captureRect(selection: region, displayHeight: presentationBounds.height).offsetBy(dx: presentationBounds.minX, dy: presentationBounds.minY) }
                 let output = RecordingMath.outputSize(source: size, scale: Double(filter.pointPixelScale), maxHeight: options.quality.maxHeight)
                 let config = SCStreamConfiguration()
                 config.width = output.width; config.height = output.height
@@ -357,12 +366,13 @@ final class AppModel: ObservableObject {
                 try await capture.start(filter: filter, configuration: config, url: url, settings: options)
                 if let startupCaptureError { throw startupCaptureError }
                 accumulated = 0; telemetry.elapsed = 0; activeStart = ProcessInfo.processInfo.systemUptime; phase = .recording
+                try presentation.start(keys: options.showKeystrokes) { [weak self] in guard let self, self.phase == .recording else { return -1 }; return self.activeDuration }
                 if options.hideWindow { mainWindow?.orderOut(nil) }
                 if options.showFloatingControls && pickedFilter?.style != .display { showFloatingControls() }
                 timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
             } catch is CancellationError { phase = .idle }
             catch {
-                captureID = nil
+                captureID = nil; _ = presentation.stop()
                 try? await engine?.stop(activeDuration: 0)
                 engine = nil; outputURL = nil; recordingSettings = nil
                 phase = .idle; self.error = error.localizedDescription; showMainWindow()
@@ -379,11 +389,19 @@ final class AppModel: ObservableObject {
         let now = ProcessInfo.processInfo.systemUptime
         let current = accumulated + (activeStart.map { now - $0 } ?? 0)
         if Int(current) != Int(telemetry.elapsed) { telemetry.elapsed = current }
-        if phase == .recording { engine?.checkpoint(activeDuration: current) }
+        if phase == .recording {
+            engine?.checkpoint(activeDuration: current)
+            if recordingSettings?.cursorSpotlight == true {
+                if let id = presentationWindowID, let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]],
+                   let value = windows.first?[kCGWindowBounds as String] as? [String: Any], let rect = CGRect(dictionaryRepresentation: value as CFDictionary) { presentationBounds = rect }
+                presentation.samplePointer(time: current, bounds: presentationBounds)
+            }
+        }
         if now - lastDiskCheck > 5 {
             lastDiskCheck = now
             if var checkpoint = journal {
                 checkpoint.activeDuration = current; checkpoint.markers = telemetry.markers
+                if Int(current) % 30 < 6 { let metadata = presentation.snapshot; checkpoint.pointers = metadata.pointers; checkpoint.shortcuts = metadata.shortcuts }
                 journal = checkpoint; journalStore?.checkpoint(checkpoint)
             }
             if diskCheckTask == nil, let id = captureID {
@@ -411,6 +429,7 @@ final class AppModel: ObservableObject {
 
     func stopRecording() async {
         guard phase.isCapturing else { return }
+        let presentationData = presentation.stop()
         telemetry.elapsed = activeDuration; phase = .saving; captureID = nil; activeStart = nil; timer?.invalidate(); timer = nil
         floatingPanel?.close(); floatingPanel = nil
         diskCheckTask?.cancel()
@@ -431,7 +450,7 @@ final class AppModel: ObservableObject {
                 }
                 telemetry.savingMessage = "Adding to your library…"
                 let recording = try await library.add(url: url, source: captureSourceName, fps: recordingSettings?.fps ?? 30,
-                    title: capturedTitle.isEmpty ? nil : capturedTitle, markers: telemetry.markers)
+                    title: capturedTitle.isEmpty ? nil : capturedTitle, markers: telemetry.markers, pointers: presentationData.pointers, shortcuts: presentationData.shortcuts, spotlight: recordingSettings?.cursorSpotlight ?? false)
                 if let journal { try await journalStore?.complete(journal.id) }; journal = nil; journalStore = nil
                 destination = .library; notify("Saved \(RecordingMath.clock(recording.duration)) of your best work.")
             }

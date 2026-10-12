@@ -16,12 +16,19 @@ struct TimelineEditor: View {
     @ViewState<Bool> private var exporting = false
     @ViewState<Float> private var progress = 0
     @ViewState<String?> private var issue = nil
+    @ViewState<AnnotationKind> private var drawingTool = .arrow
+    @ViewState<String> private var captionLanguage = "en-US"
+    @ViewState<Bool> private var transcribing = false
+    @ViewState<Double> private var captionProgress = 0
+    @ViewState<Task<Void, Never>?> private var captionTask = nil
     @ViewState<Any?> private var observer = nil
     @ViewState<Task<Void, Never>?> private var exportTask = nil
     @ViewState<Task<Void, Never>?> private var saveTask = nil
     init(recording: Recording) {
         self.recording = recording
-        _history = StateObject(wrappedValue: TimelineHistory(TimelineDocument(recordingID: recording.id, duration: recording.duration)))
+        var document = TimelineDocument(recordingID: recording.id, duration: recording.duration)
+        document.pointers = recording.pointers ?? []; document.shortcuts = recording.shortcuts ?? []; document.spotlight = recording.captureSpotlight ?? false
+        _history = StateObject(wrappedValue: TimelineHistory(document))
     }
     private var selectedIndex: Int? { history.document.cuts.firstIndex { $0.id == selectedCut } }
     var body: some View {
@@ -30,6 +37,15 @@ struct TimelineEditor: View {
             HSplitView {
                 VStack(alignment: .leading, spacing: 14) {
                     NativeVideoPlayer(player: player).frame(minHeight: 280, maxHeight: .infinity).clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay {
+                            if inspector == "Draw", drawingTool == .arrow || drawingTool == .drawing {
+                                let crop = TimelineGeometry.cropRect(source: CGSize(width: recording.width, height: recording.height), normalized: history.document.crop, aspect: history.document.aspect)
+                                AnnotationCanvas(aspect: crop.width / crop.height, kind: drawingTool) { points in
+                                    player.pause(); let time = min(playhead, history.document.duration - 0.01)
+                                    history.change { $0.annotations.append(TimelineAnnotation(kind: drawingTool, start: max(0, time), end: min($0.duration, time + 5), points: points)) }
+                                }
+                            }
+                        }
                     timeline
                     HStack(spacing: 8) {
                         Button { history.change { selectedCut = $0.split(at: playhead) ?? selectedCut } } label: { Label("Split", systemImage: "scissors") }.buttonStyle(QuietButton())
@@ -50,7 +66,7 @@ struct TimelineEditor: View {
                 }.frame(minWidth: 560).padding(.trailing, 12)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        Picker("Editing inspector", selection: $inspector) { ForEach(["Cuts", "Frame", "Audio"], id: \.self) { Text($0).tag($0) } }.pickerStyle(.segmented)
+                        Picker("Editing inspector", selection: $inspector) { ForEach(["Cuts", "Frame", "Audio", "Draw", "Captions"], id: \.self) { Text($0).tag($0) } }.pickerStyle(.menu)
                         inspectorContent
                     }.padding(16)
                 }.frame(minWidth: 265, idealWidth: 290, maxWidth: 350).background(Color.surface, in: RoundedRectangle(cornerRadius: 14)).disabled(exporting)
@@ -63,7 +79,7 @@ struct TimelineEditor: View {
             observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { time in playhead = time.seconds }
         }
         .task(id: history.revision) { await rebuildPreview() }
-        .onChange(of: model.phase) { _, phase in if phase.isActive { player.pause() } }
+        .onChange(of: model.phase) { _, phase in if phase.isActive { player.pause(); captionTask?.cancel() } }
         .onChange(of: history.revision) { _, _ in
             saveTask?.cancel()
             let document = history.document
@@ -71,7 +87,7 @@ struct TimelineEditor: View {
         }
         .onDisappear {
             player.pause(); if let observer { player.removeTimeObserver(observer) }; observer = nil; player.replaceCurrentItem(with: nil)
-            saveTask?.cancel(); exportTask?.cancel()
+            saveTask?.cancel(); exportTask?.cancel(); captionTask?.cancel()
             let document = history.document
             Task { do { try await library.saveEdits(recording, document: document) } catch { model.error = error.localizedDescription } }
         }
@@ -112,8 +128,87 @@ struct TimelineEditor: View {
         switch inspector {
         case "Cuts": cutsInspector
         case "Frame": frameInspector
+        case "Draw": presentationInspector
+        case "Captions": captionsInspector
         default: audioInspector
         }
+    }
+    private var presentationInspector: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionTitle(text: "Presentation tools")
+            Picker("Tool", selection: $drawingTool) { Text("Arrow").tag(AnnotationKind.arrow); Text("Drawing").tag(AnnotationKind.drawing); Text("Text").tag(AnnotationKind.text) }.pickerStyle(.segmented)
+            Text("Choose a tool, then drag over the preview. Effects appear in edited copies.").font(.system(size: 11)).foregroundStyle(Color.muted)
+            if drawingTool == .text {
+                Button("Add text at playhead") { player.pause(); history.change { $0.annotations.append(TimelineAnnotation(kind: .text, start: max(0, playhead), end: min($0.duration, playhead + 5), points: [AnnotationPoint(x: 0.5, y: 0.15)], text: "Your title")) } }.buttonStyle(QuietButton())
+            }
+            Toggle("Cursor spotlight", isOn: Binding(get: { history.document.spotlight }, set: { value in history.change { $0.spotlight = value } })).disabled(history.document.pointers.isEmpty)
+            Toggle("Recorded shortcuts", isOn: Binding(get: { history.document.showShortcuts }, set: { value in history.change { $0.showShortcuts = value } })).disabled(history.document.shortcuts.isEmpty)
+            Text("Enable cursor spotlight or shortcut capture in the recorder before your next take to collect those events.").font(.system(size: 10)).foregroundStyle(Color.muted)
+            ForEach(history.document.annotations) { annotation in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack { Text(annotation.kind.rawValue); Spacer(); Button { history.change { $0.annotations.removeAll { $0.id == annotation.id } } } label: { Image(systemName: "trash") }.buttonStyle(InteractiveButton(radius: 4)) }
+                    if annotation.kind == .text {
+                        TextField("Text", text: Binding(get: { history.document.annotations.first { $0.id == annotation.id }?.text ?? "" }, set: { value in history.change { if let index = $0.annotations.firstIndex(where: { $0.id == annotation.id }) { $0.annotations[index].text = String(value.prefix(500)) } } })).textFieldStyle(.roundedBorder)
+                    }
+                    Text(String(format: "%.2f–%.2fs", annotation.start, annotation.end)).foregroundStyle(Color.muted)
+                    Slider(value: annotationEnd(annotation.id), in: min(history.document.duration, annotation.start + 0.01)...max(history.document.duration, annotation.start + 0.01)) { Text("Visible until") }
+                }.font(.system(size: 11)).card(padding: 10)
+            }
+        }.font(.system(size: 12)).toggleStyle(.switch).controlSize(.small)
+    }
+    private var captionsInspector: some View {
+        LazyVStack(alignment: .leading, spacing: 14) {
+            SectionTitle(text: "Captions")
+            Picker("Language", selection: $captionLanguage) {
+                ForEach(["en-US", "en-GB", "ja-JP", "bn-BD", "es-ES", "fr-FR", "de-DE", "zh-CN", "ko-KR"], id: \.self) { Text(Locale.current.localizedString(forIdentifier: $0) ?? $0).tag($0) }
+            }
+            Button { generateCaptions() } label: { Label(transcribing ? "Transcribing…" : "Generate locally", systemImage: "waveform") }.buttonStyle(QuietButton()).disabled(transcribing || model.phase.isActive)
+            if transcribing { ProgressView(value: captionProgress); Button("Cancel transcription") { captionTask?.cancel() }.buttonStyle(QuietButton()) }
+            Text("Requires on-device recognition for the selected language. Audio stays on your Mac. Times below refer to the original recording.").font(.system(size: 10)).foregroundStyle(Color.muted)
+            Toggle("Show captions", isOn: Binding(get: { history.document.showCaptions }, set: { value in history.change { $0.showCaptions = value } })).toggleStyle(.switch).controlSize(.small)
+            HStack {
+                Button("Add caption") { history.change { let start = min(recording.duration - 0.01, $0.sourceTime(at: playhead)); $0.captions.append(CaptionCue(start: max(0, start), end: min(recording.duration, start + 2), text: "Your caption")); $0.captions.sort { $0.start < $1.start } } }.buttonStyle(QuietButton())
+                Button("Export SRT") { exportCaptions() }.buttonStyle(QuietButton()).disabled(history.document.captions.isEmpty)
+            }
+            ForEach(history.document.captions) { cue in
+                VStack(alignment: .leading, spacing: 7) {
+                    TextField("Caption", text: Binding(get: { history.document.captions.first { $0.id == cue.id }?.text ?? "" }, set: { value in history.change { if let index = $0.captions.firstIndex(where: { $0.id == cue.id }) { $0.captions[index].text = String(value.prefix(500)) } } })).textFieldStyle(.roundedBorder)
+                    HStack { TextField("Caption in", value: cueTime(cue.id, isEnd: false), format: .number.precision(.fractionLength(2))).frame(width: 65); Text("–"); TextField("Caption out", value: cueTime(cue.id, isEnd: true), format: .number.precision(.fractionLength(2))).frame(width: 65); Spacer(); Button { history.change { $0.captions.removeAll { $0.id == cue.id } } } label: { Image(systemName: "trash") }.buttonStyle(InteractiveButton(radius: 4)) }
+                }.font(.system(size: 11)).card(padding: 10)
+            }
+        }
+    }
+    private func cueTime(_ id: UUID, isEnd: Bool) -> Binding<Double> {
+        Binding<Double>(get: {
+            guard let cue = history.document.captions.first(where: { $0.id == id }) else { return 0 }
+            return isEnd ? cue.end : cue.start
+        }, set: { value in
+            guard value.isFinite else { return }
+            history.change { document in
+                guard let index = document.captions.firstIndex(where: { $0.id == id }) else { return }
+                if isEnd { document.captions[index].end = min(recording.duration, max(document.captions[index].start + 0.01, value)) }
+                else { document.captions[index].start = min(document.captions[index].end - 0.01, max(0, value)) }
+                document.captions.sort { $0.start < $1.start }
+            }
+        })
+    }
+    private func annotationEnd(_ id: UUID) -> Binding<Double> {
+        Binding(get: { history.document.annotations.first { $0.id == id }?.end ?? 0 }, set: { value in history.change { if let index = $0.annotations.firstIndex(where: { $0.id == id }) { $0.annotations[index].end = value } } })
+    }
+    private func generateCaptions() {
+        transcribing = true; captionProgress = 0
+        captionTask = Task {
+            do {
+                let cues = try await CaptionService.generate(source: library.fileURL(recording), locale: Locale(identifier: captionLanguage)) { value in Task { @MainActor in captionProgress = value } }
+                try Task.checkCancellation(); history.change { $0.captions = cues }
+            } catch { if !Task.isCancelled { issue = error.localizedDescription } }
+            transcribing = false; captionTask = nil
+        }
+    }
+    private func exportCaptions() {
+        let panel = NSSavePanel(); panel.nameFieldStringValue = recording.title + ".srt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try CaptionService.srt(CaptionService.editedCues(document: history.document)).write(to: url, atomically: true, encoding: .utf8) } catch { issue = error.localizedDescription }
     }
     private var cutsInspector: some View {
         VStack(alignment: .leading, spacing: 16) {

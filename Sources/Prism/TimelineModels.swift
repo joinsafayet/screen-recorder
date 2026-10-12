@@ -84,6 +84,10 @@ struct TimelineDocument: Codable, Equatable {
               [crop.minX, crop.minY, crop.width, crop.height].allSatisfy({ $0.isFinite }),
               crop.minX >= 0, crop.minY >= 0, crop.width > 0, crop.height > 0, crop.maxX <= 1.001, crop.maxY <= 1.001,
               audioGain.isFinite, (0...1).contains(audioGain), fadeIn.isFinite, fadeOut.isFinite, fadeIn >= 0, fadeOut >= 0,
+              annotations.count <= 2000, annotations.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end > $0.start && $0.thickness.isFinite && $0.thickness > 0 && $0.thickness <= 0.1 && $0.points.count <= 2000 && $0.points.allSatisfy { $0.x.isFinite && $0.y.isFinite && (0...1).contains($0.x) && (0...1).contains($0.y) } }),
+              pointers.count <= 100000, pointers.allSatisfy({ $0.time.isFinite && $0.time >= 0 && $0.x.isFinite && $0.y.isFinite && (0...1).contains($0.x) && (0...1).contains($0.y) }),
+              shortcuts.count <= 10000, shortcuts.allSatisfy({ $0.time.isFinite && $0.time >= 0 && $0.text.count <= 50 }),
+              captions.count <= 20000, captions.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end > $0.start && $0.end <= sourceDuration + 0.001 }),
               zooms.allSatisfy({ $0.time.isFinite && $0.time >= 0 && $0.time <= duration && (1...4).contains($0.scale) && (0...1).contains($0.x) && (0...1).contains($0.y) }) else {
             throw PrismError.message("The editing timeline contains an invalid range or crop.")
         }
@@ -112,6 +116,8 @@ struct TimelineDocument: Codable, Equatable {
         var next = document; update(&next)
         let duration = next.duration
         next.zooms.removeAll { $0.time > duration }
+        next.annotations.removeAll { $0.start >= duration }
+        for index in next.annotations.indices { next.annotations[index].end = min(duration, next.annotations[index].end) }
         next.fadeIn = min(next.fadeIn, duration / 2); next.fadeOut = min(next.fadeOut, duration / 2)
         guard next != document else { return }
         undoStack.append(document); if undoStack.count > 50 { undoStack.removeFirst() }

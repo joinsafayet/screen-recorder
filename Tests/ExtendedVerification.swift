@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreImage
 
 @MainActor enum AppContext { static weak var model: AppModel? }
 extension Verification {
@@ -113,6 +114,7 @@ extension Verification {
         let recording = try await library.add(url: source, source: "Fixture", fps: 20)
         var document = TimelineDocument(recordingID: recording.id, duration: recording.duration)
         document.cuts = [TimelineCut(start: 0.2, end: 0.7), TimelineCut(start: 1.5, end: 2.2)]
+        document.annotations = [TimelineAnnotation(kind: .arrow, start: 0, end: 1.2, points: [AnnotationPoint(x: 0.2, y: 0.5), AnnotationPoint(x: 0.8, y: 0.5)], color: 0x00FF00)]
         document.aspect = .square; document.zooms = [ZoomKeyframe(time: 0, scale: 1.2)]
         try await library.saveEdits(recording, document: document)
         let restored = try await library.loadEdits(recording); expect(restored == document)
@@ -130,5 +132,39 @@ extension Verification {
         let task = Task { try await TimelineRenderer.export(source: source, target: target, document: document, format: .mov) }
         task.cancel(); do { try await task.value; expect(false, "Cancelled edits must not replace a destination") } catch {}
         let afterCancel = try Data(contentsOf: target); expect(afterCancel == unchanged)
+    }
+}
+
+extension Verification {
+    func testShortcutFilteringAndCaptionRemapping() {
+        expect(ShortcutFormatter.label(code: 0, flags: []) == nil, "Do not capture plain typing")
+        expect(ShortcutFormatter.label(code: 0, flags: [.maskShift]) == nil)
+        expect(ShortcutFormatter.label(code: 8, flags: [.maskCommand]) == "⌘ C")
+        expect(ShortcutFormatter.label(code: 15, flags: [.maskCommand, .maskControl]) == "⌃⌘ R")
+        var document = TimelineDocument(recordingID: UUID(), duration: 10)
+        document.cuts = [TimelineCut(start: 2, end: 4), TimelineCut(start: 6, end: 8)]
+        document.captions = [CaptionCue(start: 1, end: 3, text: "First"), CaptionCue(start: 6.5, end: 7.5, text: "Second")]
+        let cues = CaptionService.editedCues(document: document)
+        expect(cues.count == 2 && cues[0].start == 0 && cues[0].end == 1 && cues[1].start == 2.5)
+        let text = CaptionService.srt(cues)
+        expect(text.contains("00:00:02,500 --> 00:00:03,500") && text.contains("Second"))
+    }
+    func testPresentationRasterAndPointerInterpolation() throws {
+        let size = CGSize(width: 320, height: 180)
+        let base = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(origin: .zero, size: size))
+        var document = TimelineDocument(recordingID: UUID(), duration: 5)
+        document.annotations = [TimelineAnnotation(kind: .arrow, start: 0, end: 3, points: [AnnotationPoint(x: 0.2, y: 0.5), AnnotationPoint(x: 0.8, y: 0.5)], color: 0x00FF00, thickness: 0.03)]
+        let result = TimelineEffects().render(base, document: document, time: 1, sourceSize: size, region: CGRect(origin: .zero, size: size), output: size)
+        let image = CIContext().createCGImage(result, from: result.extent)!
+        var bytes = [UInt8](repeating: 0, count: 320 * 180 * 4)
+        bytes.withUnsafeMutableBytes { storage in
+            let context = CGContext(data: storage.baseAddress, width: 320, height: 180, bitsPerComponent: 8, bytesPerRow: 320 * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.draw(image, in: CGRect(origin: .zero, size: size))
+        }
+        let offset = (90 * 320 + 160) * 4
+        expect(bytes[offset + 1] > 150 && bytes[offset] < 100, "Draw the editable arrow into the video frame")
+        let pointer = TimelineEffects.pointer(at: 0.125, samples: [PointerSample(time: 0, x: 0.2, y: 0.4), PointerSample(time: 0.25, x: 0.8, y: 0.6)])
+        expect(abs((pointer?.x ?? 0) - 0.5) < 0.001)
+        expect(TimelineEffects.pointer(at: 10, samples: [PointerSample(time: 0, x: 0.2, y: 0.4)]) == nil)
     }
 }

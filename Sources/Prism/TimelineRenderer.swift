@@ -35,6 +35,9 @@ enum TimelineRenderer {
             }
             cursor = cursor + range.duration
         }
+        let effects = TimelineEffects()
+        var recipe = document; recipe.captions.sort { $0.start < $1.start }; recipe.pointers.sort { $0.time < $1.time }; recipe.shortcuts.sort { $0.time < $1.time }
+        let sortedRecipe = recipe
         let applier: @Sendable (AVAsynchronousCIImageFilteringRequest) -> Void = { request in
             autoreleasepool {
                 let zoom = document.zoom(at: request.compositionTime.seconds)
@@ -45,7 +48,8 @@ enum TimelineRenderer {
                 let image = request.sourceImage.cropped(to: region)
                     .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
                     .transformed(by: CGAffineTransform(scaleX: CGFloat(output.width) / region.width, y: CGFloat(output.height) / region.height))
-                request.finish(with: image.cropped(to: CGRect(x: 0, y: 0, width: output.width, height: output.height)), context: nil)
+                let result = effects.render(image, document: sortedRecipe, time: request.compositionTime.seconds, sourceSize: visible, region: region, output: CGSize(width: output.width, height: output.height))
+                request.finish(with: result, context: nil)
             }
         }
         let videoComposition: AVMutableVideoComposition = try await withCheckedThrowingContinuation { continuation in

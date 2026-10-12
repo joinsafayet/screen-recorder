@@ -140,6 +140,8 @@ struct CaptureSettings: Codable, Equatable {
     var showFloatingControls = true
     var codec: VideoCodec = .automatic
     var highlightClicks = false
+    var showKeystrokes = false
+    var cursorSpotlight = false
     var presenterCorner: PresenterCorner = .bottomRight
     var presenterSize = 0.23
     var mirrorCamera = true
@@ -149,7 +151,7 @@ struct CaptureSettings: Codable, Equatable {
     init() {}
     // Older installations keep their settings when new options are introduced.
     enum CodingKeys: String, CodingKey {
-        case mode, quality, format, fps, systemAudio, microphone, microphoneID, camera, cameraID, showCursor, countdown, stopAfterMinutes, hideWindow, showFloatingControls, codec, highlightClicks, presenterCorner, presenterSize, mirrorCamera, systemGain, microphoneGain
+        case mode, quality, format, fps, systemAudio, microphone, microphoneID, camera, cameraID, showCursor, countdown, stopAfterMinutes, hideWindow, showFloatingControls, codec, highlightClicks, showKeystrokes, cursorSpotlight, presenterCorner, presenterSize, mirrorCamera, systemGain, microphoneGain
     }
     init(from decoder: Decoder) throws {
         self.init()
@@ -171,6 +173,8 @@ struct CaptureSettings: Codable, Equatable {
         showFloatingControls = try c.decodeIfPresent(Bool.self, forKey: .showFloatingControls) ?? showFloatingControls
         codec = try c.decodeIfPresent(VideoCodec.self, forKey: .codec) ?? codec
         highlightClicks = try c.decodeIfPresent(Bool.self, forKey: .highlightClicks) ?? highlightClicks
+        showKeystrokes = try c.decodeIfPresent(Bool.self, forKey: .showKeystrokes) ?? showKeystrokes
+        cursorSpotlight = try c.decodeIfPresent(Bool.self, forKey: .cursorSpotlight) ?? cursorSpotlight
         presenterCorner = try c.decodeIfPresent(PresenterCorner.self, forKey: .presenterCorner) ?? presenterCorner
         presenterSize = min(0.4, max(0.12, try c.decodeIfPresent(Double.self, forKey: .presenterSize) ?? presenterSize))
         mirrorCamera = try c.decodeIfPresent(Bool.self, forKey: .mirrorCamera) ?? mirrorCamera
@@ -193,6 +197,9 @@ struct Recording: Identifiable, Codable, Equatable {
     var favorite: Bool = false
     var thumbnail: String?
     var markers: [RecordingMarker]?
+    var pointers: [PointerSample]?
+    var shortcuts: [ShortcutSample]?
+    var captureSpotlight: Bool?
 }
 
 enum CapturePhase: Equatable {
