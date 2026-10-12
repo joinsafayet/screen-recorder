@@ -54,10 +54,11 @@ extension Verification {
         do { try await store.begin(invalid); expect(false, "Reject journal traversal") } catch {}
     }
     @MainActor func testInterruptedFragmentIsPlayableAndRecoverable() async throws {
+        for format in [VideoFormat.mov, .mp4] {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("prism-interrupted-\(UUID())")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        let url = folder.appendingPathComponent("interrupted.mov")
+        let url = folder.appendingPathComponent("interrupted." + format.ext)
         let process = Process(); process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
         process.arguments = ["--interrupted-fixture", url.path]
         process.standardOutput = Pipe(); process.standardError = Pipe(); try process.run()
@@ -69,7 +70,7 @@ extension Verification {
         let generator = AVAssetImageGenerator(asset: asset)
         let image = try await generator.image(at: CMTime(seconds: 1, preferredTimescale: 600)).image
         expect(image.width == 320)
-        var settings = CaptureSettings(); settings.format = .mov
+        var settings = CaptureSettings(); settings.format = format
         let journal = CaptureJournal(filename: url.lastPathComponent, title: "Important demo", source: "Test window", settings: settings,
             activeDuration: 13, markers: [RecordingMarker(time: 1, title: "Kept"), RecordingMarker(time: 100, title: "Outside")])
         try await CaptureJournalStore(folder: folder).begin(journal)
@@ -79,6 +80,7 @@ extension Verification {
         expect(library.recordings[0].markers?.count == 1)
         let remaining = await CaptureJournalStore.pending(in: folder)
         expect(remaining.isEmpty)
+        }
     }
 }
 
@@ -105,9 +107,17 @@ extension Verification {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let source = folder.appendingPathComponent("source.mp4"), target = folder.appendingPathComponent("edited.mov")
-        var settings = CaptureSettings(); settings.systemAudio = false
+        let settings = CaptureSettings()
         let writer = try RecordingWriter(url: source, size: (320, 180), settings: settings)
-        for i in 0..<60 { writer.consume(try frame(at: 10 + Double(i) / 20), type: .screen); try await Task.sleep(for: .milliseconds(3)) }
+        var audioIndex = 0
+        for i in 0..<60 {
+            writer.consume(try frame(at: 10 + Double(i) / 20), type: .screen)
+            while Double(audioIndex) * 1024 / 48000 < Double(i + 1) / 20 {
+                writer.consume(try audio(at: 10 + Double(audioIndex) * 1024 / 48000, channels: 2), type: .audio)
+                audioIndex += 1
+            }
+            try await Task.sleep(for: .milliseconds(3))
+        }
         try await writer.finish(activeDuration: 3)
         let original = try Data(contentsOf: source)
         let library = LibraryStore(folder: folder, support: folder.appendingPathComponent("Index"))
@@ -116,6 +126,7 @@ extension Verification {
         document.cuts = [TimelineCut(start: 0.2, end: 0.7), TimelineCut(start: 1.5, end: 2.2)]
         document.annotations = [TimelineAnnotation(kind: .arrow, start: 0, end: 1.2, points: [AnnotationPoint(x: 0.2, y: 0.5), AnnotationPoint(x: 0.8, y: 0.5)], color: 0x00FF00)]
         document.aspect = .square; document.zooms = [ZoomKeyframe(time: 0, scale: 1.2)]
+        document.audioGain = 0.7; document.fadeIn = 0.4; document.fadeOut = 0.4
         try await library.saveEdits(recording, document: document)
         let restored = try await library.loadEdits(recording); expect(restored == document)
         try await TimelineRenderer.export(source: source, target: target, document: document, format: .mov)
@@ -127,6 +138,30 @@ extension Verification {
         let generator = AVAssetImageGenerator(asset: asset)
         let image = try await generator.image(at: CMTime(seconds: 0.3, preferredTimescale: 600)).image
         expect(image.width == 180 && image.height == 180)
+        let audioTrack = try unwrap(try await asset.loadTracks(withMediaType: .audio).first)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMIsFloatKey: true, AVLinearPCMBitDepthKey: 32, AVLinearPCMIsNonInterleaved: false])
+        reader.add(output); expect(reader.startReading())
+        var power = [Double](repeating: 0, count: 3), counts = [Int](repeating: 0, count: 3)
+        while let sample = output.copyNextSampleBuffer(), let block = sample.dataBuffer,
+              let description = sample.formatDescription, let format = CMAudioFormatDescriptionGetStreamBasicDescription(description) {
+            let length = CMBlockBufferGetDataLength(block)
+            let memory = UnsafeMutableRawPointer.allocate(byteCount: length, alignment: 16)
+            defer { memory.deallocate() }
+            expect(CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: memory) == noErr)
+            let values = memory.assumingMemoryBound(to: Float.self)
+            let channels = max(1, Int(format.pointee.mChannelsPerFrame))
+            for index in 0..<(length / 4) {
+                let time = sample.presentationTimeStamp.seconds + Double(index / channels) / format.pointee.mSampleRate
+                let bucket = (0.025..<0.125).contains(time) ? 0 : (0.5..<0.7).contains(time) ? 1 : (1.075..<1.175).contains(time) ? 2 : nil
+                if let bucket { power[bucket] += Double(values[index] * values[index]); counts[bucket] += 1 }
+            }
+        }
+        expect(reader.status == .completed && counts.allSatisfy { $0 > 1000 })
+        let rms = zip(power, counts).map { sqrt($0.0 / Double($0.1)) }
+        expect(rms[1] > 0.03, "Edited audio must remain audible between fades")
+        expect(rms[0] < rms[1] * 0.45 && rms[2] < rms[1] * 0.45, "Decoded audio must fade at both ends")
         let after = try Data(contentsOf: source); expect(after == original)
         let unchanged = try Data(contentsOf: target)
         let task = Task { try await TimelineRenderer.export(source: source, target: target, document: document, format: .mov) }
@@ -179,7 +214,9 @@ extension Verification {
         let writer = try RecordingWriter(url: source, size: (320, 180), settings: settings)
         writer.consume(try frame(at: 10), type: .screen); try await Task.sleep(for: .milliseconds(30)); try await writer.finish(activeDuration: 0.5)
         let library = LibraryStore(folder: folder, support: folder.appendingPathComponent("Index"))
-        let recording = try await library.add(url: source, source: "Fixture", fps: 30)
+        let recording = try await library.add(url: source, source: "Fixture", fps: 30, pointers: (0..<1000).map { PointerSample(time: Double($0) / 2000, x: 0.5, y: 0.5) }, spotlight: true)
+        expect(recording.pointers == nil && recording.presentationFile != nil, "Keep the library index lightweight")
+        let recipe = try await library.editingDocument(recording); expect(recipe.pointers.count == 1000 && recipe.spotlight)
         try library.organize(ids: [recording.id], project: " Course ", tags: "Swift, tutorial, Swift, ")
         try library.setFavorite(ids: [recording.id], value: true)
         let restored = LibraryStore(folder: folder, support: folder.appendingPathComponent("Index"))

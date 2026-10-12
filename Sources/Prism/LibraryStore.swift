@@ -11,6 +11,7 @@ final class LibraryStore: ObservableObject {
     @Published var notice: String?
     private let metadataURL: URL
     private var manifestWritable = true
+    private let editDisk = DispatchQueue(label: "prism.edit.storage", qos: .utility)
     private let thumbnailCache = NSCache<NSURL, NSImage>()
 
     init(folder customFolder: URL? = nil, support customSupport: URL? = nil) {
@@ -74,6 +75,12 @@ final class LibraryStore: ObservableObject {
             let bytes = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
             let id = UUID()
             var thumbnail: String?
+            var presentationFile: String?
+            if !pointers.isEmpty || !shortcuts.isEmpty {
+                let name = "presentation-" + id.uuidString + ".json"
+                try JSONEncoder().encode(PresentationCapture(pointers: pointers, shortcuts: shortcuts)).write(to: support.appendingPathComponent(name), options: .atomic)
+                presentationFile = name
+            }
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
             generator.maximumSize = CGSize(width: 640, height: 400)
@@ -86,7 +93,7 @@ final class LibraryStore: ObservableObject {
             }
             return Recording(id: id, filename: url.lastPathComponent, title: title ?? url.deletingPathExtension().lastPathComponent,
                 createdAt: Date(), duration: duration, bytes: bytes, width: Int(abs(visibleSize.width)), height: Int(abs(visibleSize.height)),
-                fps: fps > 0 ? fps : Int(rate.rounded()), source: source, thumbnail: thumbnail, markers: markers, pointers: pointers, shortcuts: shortcuts, captureSpotlight: spotlight)
+                fps: fps > 0 ? fps : Int(rate.rounded()), source: source, thumbnail: thumbnail, markers: markers, captureSpotlight: spotlight, presentationFile: presentationFile)
         }.value
         do { try commit([recording] + recordings) }
         catch { if let thumb = thumbnailURL(recording) { try? FileManager.default.removeItem(at: thumb) }; throw error }
@@ -239,11 +246,26 @@ final class LibraryStore: ObservableObject {
             try document.validate(sourceDuration: recording.duration); return document
         }.value
     }
+    func editingDocument(_ recording: Recording) async throws -> TimelineDocument {
+        if let saved = try await loadEdits(recording) { return saved }
+        let support = supportDirectory
+        let presentation = try await Task.detached(priority: .utility) { () throws -> PresentationCapture in
+            if let name = recording.presentationFile, name == URL(fileURLWithPath: name).lastPathComponent {
+                return try JSONDecoder().decode(PresentationCapture.self, from: Data(contentsOf: support.appendingPathComponent(name)))
+            }
+            return PresentationCapture(pointers: recording.pointers ?? [], shortcuts: recording.shortcuts ?? [])
+        }.value
+        var document = TimelineDocument(recordingID: recording.id, duration: recording.duration)
+        document.pointers = presentation.pointers; document.shortcuts = presentation.shortcuts; document.spotlight = recording.captureSpotlight ?? false
+        return document
+    }
     func saveEdits(_ recording: Recording, document: TimelineDocument) async throws {
         guard document.recordingID == recording.id else { throw PrismError.message("The edit document does not match this recording.") }
         try document.validate(sourceDuration: recording.duration)
         let url = metadataURL.deletingLastPathComponent().appendingPathComponent("edits-" + recording.id.uuidString + ".json")
-        try await Task.detached(priority: .utility) { try Task.checkCancellation(); try JSONEncoder().encode(document).write(to: url, options: .atomic) }.value
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            editDisk.async { do { try JSONEncoder().encode(document).write(to: url, options: .atomic); continuation.resume() } catch { continuation.resume(throwing: error) } }
+        }
     }
     func validateExportTarget(_ target: URL) throws {
         let location = target.standardizedFileURL.resolvingSymlinksInPath()

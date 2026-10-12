@@ -2,7 +2,7 @@ import AppKit
 import CoreGraphics
 import Carbon
 
-struct PresentationCapture {
+struct PresentationCapture: Codable {
     var pointers: [PointerSample]
     var shortcuts: [ShortcutSample]
 }

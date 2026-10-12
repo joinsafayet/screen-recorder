@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StudioPresets: View {
     @EnvironmentObject private var model: AppModel
+    var compact = false
     var body: some View {
         HStack(spacing: 10) {
             ForEach(RecordingPreset.allCases) { preset in
@@ -11,15 +12,15 @@ struct StudioPresets: View {
                     preset.apply(to: &settings)
                     model.settings = settings
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: preset.icon).font(.system(size: 18, weight: .light)).foregroundStyle(Color.accent)
+                    HStack(spacing: compact ? 6 : 10) {
+                        Image(systemName: preset.icon).font(.system(size: compact ? 14 : 18, weight: .light)).foregroundStyle(Color.accent)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(preset.rawValue).font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.ink)
-                            Text(preset.detail).font(.system(size: 9)).foregroundStyle(Color.muted)
+                            Text(preset.rawValue).font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.ink).lineLimit(1)
+                            if !compact { Text(preset.detail).font(.system(size: 9)).foregroundStyle(Color.muted) }
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(Color.accent).opacity(selected ? 1 : 0)
-                    }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
+                    }.padding(compact ? 10 : 13).frame(maxWidth: .infinity, alignment: .leading)
                         .selectionSurface(selected, radius: 11)
                 }.buttonStyle(InteractiveButton(radius: 11)).help("Apply \(preset.rawValue) recording settings")
             }
@@ -52,17 +53,18 @@ struct CaptureMonitor: View {
     var body: some View {
         let s = telemetry.statistics
         let pressure = s.droppedVideo > 0 || s.droppedAudio > 0
-        HStack(spacing: 24) {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 6) { Circle().fill(pressure ? Color.orange : Color.mint).frame(width: 6, height: 6); Text(model.phase.isCapturing ? "CAPTURE MONITOR" : "LAST TAKE").font(.system(size: 9, weight: .bold)).tracking(1.4) }
                 Text(pressure ? "Encoder pressure detected" : s.frames > 0 ? "Frames are saving normally" : "Waiting for first frame…").font(.system(size: 11)).foregroundStyle(Color.muted)
             }
-            Spacer(minLength: 0)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 95), spacing: 14)], alignment: .leading, spacing: 14) {
             metric("Frames saved", "\(s.frames)")
             metric("Dropped frames", "\(s.droppedVideo)")
             metric("Audio drops", "\(s.droppedAudio)")
             metric("Frame processing", String(format: "%.1f ms", s.processingMilliseconds))
             metric("Capture", "\(s.width) × \(s.height)")
+            }
         }.card(padding: 17)
         .help("Counts frames received by Prism. Static screens naturally produce fewer frames. Drops indicate encoder backpressure; choose a lower resolution or frame rate if they increase. Processing time excludes asynchronous encoding.")
     }

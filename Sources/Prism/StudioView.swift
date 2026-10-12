@@ -5,47 +5,65 @@ struct StudioView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.prismReduceMotion) private var reduceMotion
     @ViewState<Bool> private var inspectorVisible = true
+    @ViewState<Bool> private var compactInspectorPresented = false
     var body: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
-                HStack(spacing: 14) {
+                let compact = geometry.size.width < 760
+                let headerLayout = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(spacing: 14))
+                headerLayout {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Recording studio").font(.system(size: 25, weight: .semibold)).tracking(-0.7)
-                        Text("Frame your idea. Make it yours.").font(.system(size: 11)).foregroundStyle(Color.muted)
+                        Text("Recording studio").font(.system(size: geometry.size.width < 760 ? 21 : 25, weight: .semibold)).tracking(-0.7).lineLimit(1)
+                        if geometry.size.width >= 760 { Text("Frame your idea. Make it yours.").font(.system(size: 11)).foregroundStyle(Color.muted) }
                     }
-                    Spacer(minLength: 12)
+                    if !compact { Spacer(minLength: 12) }
+                    HStack(spacing: compact ? 8 : 14) {
                     HStack(spacing: 8) {
                         Image(systemName: "pencil.line").foregroundStyle(Color.muted)
                         TextField("Name this recording…", text: $model.sessionTitle).textFieldStyle(.plain).font(.system(size: 12))
-                    }.padding(10).frame(width: 210).background(Color.surface, in: RoundedRectangle(cornerRadius: 9)).disabled(model.phase.isActive)
+                    }.padding(10).frame(maxWidth: compact ? .infinity : 210).background(Color.surface, in: RoundedRectangle(cornerRadius: 9)).disabled(model.phase.isActive)
                     Button { Task { await model.refreshSources() } } label: { Image(systemName: "arrow.clockwise").frame(width: 16, height: 16) }
                         .buttonStyle(QuietButton()).disabled(model.loadingSources || model.phase.isActive).help("Refresh capture sources")
                     PreparationAction()
-                    Button { inspectorVisible.toggle() } label: { Image(systemName: "sidebar.right").frame(width: 16, height: 16) }
+                    Button { if geometry.size.width < 760 { compactInspectorPresented = true } else { inspectorVisible.toggle() } } label: { Image(systemName: "sidebar.right").frame(width: 16, height: 16) }
                         .buttonStyle(QuietButton()).help("Show or hide recording inspector")
+                    }
                 }.padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 16)
-                StudioPresets().disabled(model.phase.isActive).padding(.horizontal, 24).padding(.bottom, 16)
-                HSplitView {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            SectionTitle(text: "Capture source")
-                            CaptureModeSelector().disabled(model.phase.isActive)
-                            SourcePreview(height: min(420, max(240, geometry.size.height - 360)))
-                            CaptureSourcePicker().disabled(model.phase.isActive)
-                            Label(model.pickedFilter?.style == .display ? "Prism hides during capture. Use the menu bar to pause or stop." : "Prism and its controls stay outside your capture.", systemImage: "lock.shield")
-                                .font(.system(size: 10)).foregroundStyle(Color.muted)
-                            PreparationPanel()
-                            if model.phase.isCapturing || model.telemetry.statistics.frames > 0 { CaptureMonitor() }
-                        }.padding(18)
-                    }.frame(minWidth: 410, maxWidth: .infinity).background(Color.surface, in: RoundedRectangle(cornerRadius: 16))
-                    if inspectorVisible {
+                StudioPresets(compact: compact).disabled(model.phase.isActive).padding(.horizontal, 24).padding(.bottom, 16)
+                Group {
+                    if compact || !inspectorVisible {
+                        capturePanel(height: geometry.size.height)
+                    } else {
+                        HSplitView {
+                        capturePanel(height: geometry.size.height).frame(minWidth: 410)
                         RecordingInspector().frame(minWidth: 270, idealWidth: 300, maxWidth: 360)
+                        }
                     }
                 }.padding(.horizontal, 24).padding(.bottom, 16)
                 Divider().overlay(Color.line)
                 RecordDock().padding(.horizontal, 24).padding(.vertical, 12)
-            }
+            }.frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .sheet(isPresented: $compactInspectorPresented) {
+            VStack(spacing: 14) {
+                HStack { Text("Recording settings").font(.headline); Spacer(); Button("Done") { compactInspectorPresented = false }.buttonStyle(QuietButton()) }
+                RecordingInspector()
+            }.padding(20).frame(width: 360, height: 560).background(Color.canvas)
+        }
+    }
+    private func capturePanel(height: CGFloat) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SectionTitle(text: "Capture source")
+                CaptureModeSelector().disabled(model.phase.isActive)
+                CaptureSourcePicker().disabled(model.phase.isActive)
+                SourcePreview(height: min(340, max(220, height - 510)))
+                Label(model.pickedFilter?.style == .display ? "Prism hides during capture. Use the menu bar to pause or stop." : "Prism and its controls stay outside your capture.", systemImage: "lock.shield")
+                    .font(.system(size: 10)).foregroundStyle(Color.muted)
+                PreparationPanel()
+                if model.phase.isCapturing || model.telemetry.statistics.frames > 0 { CaptureMonitor() }
+            }.padding(18)
+        }.frame(maxWidth: .infinity).background(Color.surface, in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -282,7 +300,7 @@ struct RecordDock: View {
                     if model.canCapture { model.startRecording() } else { Task { await model.requestScreenAccess() } }
                 } label: {
                     HStack(spacing: 12) { Image(systemName: "record.circle"); Text(model.canCapture ? "Start recording" : "Set up recording"); if model.canCapture { Text("⌘ ⇧ R").font(.system(size: 10)).opacity(0.7) } }
-                }.buttonStyle(PrimaryButton()).disabled(model.phase.isActive || library.isBusy)
+                }.buttonStyle(PrimaryButton()).disabled(model.phase.isActive || library.isBusy || model.editorExporting)
             }
         }.card(padding: 18)
     }

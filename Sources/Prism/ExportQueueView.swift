@@ -15,7 +15,7 @@ struct ExportQueueView: View {
                     Button(queue.running ? "Pause queue" : "Start exports") { if queue.running { queue.pause() } else { queue.start() } }.buttonStyle(PrimaryButton()).disabled(queue.captureActive || queue.pendingCount == 0)
                     Button("Clear finished") { queue.clearFinished() }.buttonStyle(QuietButton())
                 }
-                if queue.captureActive { Label("Exports pause during recording to keep capture responsive.", systemImage: "pause.circle").font(.system(size: 12)).foregroundStyle(Color.accent).card(padding: 15) }
+                if queue.captureActive { Label(model.editorExporting ? "The queue pauses while your edited copy exports." : "Exports pause during recording to keep capture responsive.", systemImage: "pause.circle").font(.system(size: 12)).foregroundStyle(Color.accent).card(padding: 15) }
                 if let issue = queue.issue { Text(issue).font(.system(size: 12)).foregroundStyle(.orange).card(padding: 15) }
                 if queue.jobs.isEmpty {
                     VStack(spacing: 15) { Image(systemName: "square.and.arrow.up.on.square").font(.system(size: 44, weight: .light)).foregroundStyle(Color.accent); Text("Your next exports start here.").font(.system(size: 20, weight: .medium)); Text("Select recordings in the library or queue an edited copy from the timeline.").font(.system(size: 12)).foregroundStyle(Color.muted) }.frame(maxWidth: .infinity, minHeight: 350).card(padding: 24)

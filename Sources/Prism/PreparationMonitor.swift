@@ -56,6 +56,7 @@ final class PreparationMonitor: NSObject, ObservableObject, AVCaptureVideoDataOu
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var session: AVCaptureSession?
     private var stream: SCStream?
+    private var starting = false
     private let stateLock = NSLock()
     private var generation = UUID()
     private var requestID: UUID { stateLock.lock(); defer { stateLock.unlock() }; return generation }
@@ -64,6 +65,7 @@ final class PreparationMonitor: NSObject, ObservableObject, AVCaptureVideoDataOu
 
     @MainActor func start(settings: CaptureSettings, filter: SCContentFilter?, previewScreen: Bool = true, crop: CGRect? = nil) async throws {
         await stop()
+        starting = true; defer { starting = false }
         let id = resetID(); issue = nil
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             sessionQueue.async {
@@ -111,7 +113,9 @@ final class PreparationMonitor: NSObject, ObservableObject, AVCaptureVideoDataOu
         } catch { await stop(); throw error }
     }
     @MainActor func stop() async {
-        resetID(); running = false
+        resetID()
+        guard running || starting || stream != nil else { return }
+        running = false
         let active = stream; stream = nil; try? await active?.stopCapture()
         await withCheckedContinuation { continuation in sessionQueue.async { self.session?.stopRunning(); self.session = nil; continuation.resume() } }
         cameraImage = nil; screenImage = nil; microphoneLevel = 0; systemLevel = 0

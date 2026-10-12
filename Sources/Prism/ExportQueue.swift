@@ -55,7 +55,7 @@ struct ExportJob: Codable, Identifiable {
         guard jobs.count + recordings.count <= 500 else { throw PrismError.message("Clear finished jobs before adding more exports.") }
         var added: [ExportJob] = []
         for recording in recordings {
-            var document = try await library.loadEdits(recording) ?? TimelineDocument(recordingID: recording.id, duration: recording.duration)
+            var document = try await library.editingDocument(recording)
             if let aspect = preset.aspect { document.aspect = aspect }
             let title = recording.title.map { "/\\:\n\r".contains($0) ? "_" : $0 }
             let filename = String(title.prefix(100)) + " — " + preset.rawValue + " " + String(UUID().uuidString.prefix(6)) + ".mp4"

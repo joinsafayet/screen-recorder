@@ -200,6 +200,7 @@ struct Recording: Identifiable, Codable, Equatable {
     var pointers: [PointerSample]?
     var shortcuts: [ShortcutSample]?
     var captureSpotlight: Bool?
+    var presentationFile: String?
     var project: String?
     var tags: [String]?
 }

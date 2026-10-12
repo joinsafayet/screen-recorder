@@ -4,9 +4,18 @@ import SwiftUI
 // also exports a State macro whose plugin is only bundled with full Xcode.
 typealias ViewState<Value> = SwiftUI.State<Value>
 
+enum AccentPalette: String, CaseIterable, Identifiable {
+    case blue = "Blue", teal = "Teal", amber = "Amber", coral = "Coral"
+    var id: String { rawValue }
+    var dark: UInt32 { switch self { case .blue: return 0x78AEFF; case .teal: return 0x66D8C8; case .amber: return 0xE9BD70; case .coral: return 0xF79D91 } }
+    var light: UInt32 { switch self { case .blue: return 0x2465CB; case .teal: return 0x167366; case .amber: return 0x8E5E13; case .coral: return 0xB34E42 } }
+}
+
 extension Color {
-    static let accent = adaptive(dark: 0x78AEFF, light: 0x2465CB)
-    static let action = Color(red: 0.16, green: 0.39, blue: 0.78)
+    private static var selectedPalette: AccentPalette { AccentPalette(rawValue: UserDefaults.standard.string(forKey: "accentChoice") ?? "Blue") ?? .blue }
+    static var accent: Color { adaptive(dark: selectedPalette.dark, light: selectedPalette.light) }
+    static var action: Color { adaptive(dark: selectedPalette.light, light: selectedPalette.light) }
+    static func swatch(_ palette: AccentPalette) -> Color { adaptive(dark: palette.dark, light: palette.light) }
     static let mint = adaptive(dark: 0x63D4BC, light: 0x167A67)
     static let canvas = adaptive(dark: 0x0E131B, light: 0xF3F6FB)
     static let sidebar = adaptive(dark: 0x111822, light: 0xF8FAFD)

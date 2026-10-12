@@ -236,6 +236,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, AVCapture
     private var stream: SCStream?
     private var recorder: RecordingWriter?
     private var cameraSession: AVCaptureSession?
+    private var cameraObserver: NSObjectProtocol?
     private var lastMeterTime = 0.0
     private var lastStatisticsTime = 0.0
     private var activity: NSObjectProtocol?
@@ -277,7 +278,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, AVCapture
         if let stream { do { try await stream.stopCapture() } catch { streamError = error } }
         stream = nil
         await withCheckedContinuation { continuation in
-            cameraQueue.async { self.cameraSession?.stopRunning(); self.cameraSession = nil; continuation.resume() }
+            cameraQueue.async { if let observer = self.cameraObserver { NotificationCenter.default.removeObserver(observer) }; self.cameraObserver = nil; self.cameraSession?.stopRunning(); self.cameraSession = nil; continuation.resume() }
         }
         let writer: RecordingWriter? = queue.sync { let writer = recorder; stoppedStatistics = writer?.statistics ?? CaptureStatistics(); recorder = nil; return writer }
         // The output queue has now drained; no more buffers can reach this writer.
@@ -326,7 +327,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, AVCapture
 
     private func startCamera(id: String) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            cameraQueue.async {
+            cameraQueue.async { [self] in
                 do {
                     let discovery = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .external], mediaType: .video, position: .unspecified)
                     guard let device = discovery.devices.first(where: { $0.uniqueID == id }) ?? AVCaptureDevice.default(for: .video) else { throw PrismError.message("Connect a camera to use the presenter bubble.") }
@@ -339,6 +340,10 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, AVCapture
                     output.setSampleBufferDelegate(self, queue: self.queue)
                     guard session.canAddOutput(output) else { throw PrismError.message("The camera could not be configured.") }
                     session.addOutput(output); session.commitConfiguration(); self.cameraSession = session
+                    self.cameraObserver = NotificationCenter.default.addObserver(forName: AVCaptureSession.runtimeErrorNotification, object: session, queue: nil) { [weak self] notification in
+                        let error = notification.userInfo?[AVCaptureSessionErrorKey] as? Error ?? PrismError.message("The camera stopped unexpectedly.")
+                        self?.onError?(error)
+                    }
                     session.startRunning()
                     guard session.isRunning else { throw PrismError.message("Your camera is in use or could not be started.") }
                     continuation.resume()

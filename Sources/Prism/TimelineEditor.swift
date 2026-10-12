@@ -76,7 +76,7 @@ struct TimelineEditor: View {
             footer
         }.padding(24).frame(width: 1060, height: 730).background(Color.canvas).foregroundStyle(Color.ink).tint(.accent)
         .task {
-            do { if let saved = try await library.loadEdits(recording) { history.load(saved) } } catch { issue = error.localizedDescription }
+            do { let saved = try await library.editingDocument(recording); history.load(saved) } catch { issue = error.localizedDescription }
             selectedCut = history.document.cuts.first?.id
             observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { time in playhead = time.seconds }
         }
@@ -146,7 +146,7 @@ struct TimelineEditor: View {
             Picker("Tool", selection: $drawingTool) { Text("Arrow").tag(AnnotationKind.arrow); Text("Drawing").tag(AnnotationKind.drawing); Text("Text").tag(AnnotationKind.text) }.pickerStyle(.segmented)
             Text("Choose a tool, then drag over the preview. Effects appear in edited copies.").font(.system(size: 11)).foregroundStyle(Color.muted)
             if drawingTool == .text {
-                Button("Add text at playhead") { player.pause(); history.change { $0.annotations.append(TimelineAnnotation(kind: .text, start: max(0, playhead), end: min($0.duration, playhead + 5), points: [AnnotationPoint(x: 0.5, y: 0.15)], text: "Your title")) } }.buttonStyle(QuietButton())
+                Button("Add text at playhead") { player.pause(); history.change { let time = max(0, min(playhead, $0.duration - 0.01)); $0.annotations.append(TimelineAnnotation(kind: .text, start: time, end: min($0.duration, time + 5), points: [AnnotationPoint(x: 0.5, y: 0.15)], text: "Your title")) } }.buttonStyle(QuietButton())
             }
             Toggle("Cursor spotlight", isOn: Binding(get: { history.document.spotlight }, set: { value in history.change { $0.spotlight = value } })).disabled(history.document.pointers.isEmpty)
             Toggle("Recorded shortcuts", isOn: Binding(get: { history.document.showShortcuts }, set: { value in history.change { $0.showShortcuts = value } })).disabled(history.document.shortcuts.isEmpty)
@@ -224,8 +224,8 @@ struct TimelineEditor: View {
                 HStack { Text("In seconds"); Spacer(); TextField("In seconds", value: cutBinding(history.document.cuts[index].id, isEnd: false), format: .number.precision(.fractionLength(2))).frame(width: 80).textFieldStyle(.roundedBorder) }
                 HStack { Text("Out seconds"); Spacer(); TextField("Out seconds", value: cutBinding(history.document.cuts[index].id, isEnd: true), format: .number.precision(.fractionLength(2))).frame(width: 80).textFieldStyle(.roundedBorder) }
                 HStack {
-                    Button("Move earlier") { history.change { $0.cuts.swapAt(index, index - 1) } }.buttonStyle(QuietButton()).disabled(index == 0)
-                    Button("Later") { history.change { $0.cuts.swapAt(index, index + 1) } }.buttonStyle(QuietButton()).disabled(index + 1 == history.document.cuts.count)
+                    Button("Move earlier") { if let current = selectedIndex, current > 0 { history.change { $0.cuts.swapAt(current, current - 1) } } }.buttonStyle(QuietButton()).disabled(index == 0)
+                    Button("Later") { if let current = selectedIndex, current + 1 < history.document.cuts.count { history.change { $0.cuts.swapAt(current, current + 1) } } }.buttonStyle(QuietButton()).disabled(index + 1 == history.document.cuts.count)
                 }
             } else { Text("Choose a section in the timeline.").foregroundStyle(Color.muted) }
             Button { history.change { let cut = TimelineCut(start: 0, end: recording.duration); $0.cuts.append(cut); selectedCut = cut.id } } label: { Label("Add source section", systemImage: "plus") }.buttonStyle(QuietButton())
@@ -266,21 +266,27 @@ struct TimelineEditor: View {
         }.font(.system(size: 12))
     }
     private var footer: some View {
-        HStack(spacing: 12) {
-            Label("Your original is preserved", systemImage: "doc.on.doc").font(.system(size: 11)).foregroundStyle(Color.muted)
-            Spacer()
-            if exporting { ProgressView(value: Double(progress)).frame(width: 90); Button("Cancel") { exportTask?.cancel() }.buttonStyle(QuietButton()) }
-            else { ShareLink(item: library.fileURL(recording)) { Image(systemName: "square.and.arrow.up") }.buttonStyle(QuietButton()).help("Share original") }
-            Menu("Presets") {
-                ForEach(OutputPreset.allCases) { preset in Button(preset.rawValue) { if let aspect = preset.aspect { history.change { $0.aspect = aspect } }; quality = preset.quality } }
-                Divider()
-                ForEach(model.savedOutputPresets) { preset in Button(preset.name) { history.change { $0.aspect = preset.aspect }; quality = preset.quality; format = preset.format } }
-                Button("Save current preset…") { presetName = "My export"; savingPreset = true }
-            }.font(.system(size: 11)).disabled(exporting)
-            Button("Queue") { queueExport() }.buttonStyle(QuietButton()).disabled(exporting || model.phase.isActive)
-            Picker("Quality", selection: $quality) { ForEach(ExportQuality.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 150).disabled(exporting)
-            Picker("Format", selection: $format) { ForEach(VideoFormat.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 70).disabled(exporting)
-            Button { export() } label: { Label(exporting ? "Exporting…" : "Export edited copy", systemImage: "square.and.arrow.up") }.buttonStyle(PrimaryButton()).disabled(exporting || model.phase.isActive)
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Label("Your original is preserved", systemImage: "doc.on.doc").font(.system(size: 11)).foregroundStyle(Color.muted)
+                Spacer()
+                Menu("Presets") {
+                    ForEach(OutputPreset.allCases) { preset in Button(preset.rawValue) { if let aspect = preset.aspect { history.change { $0.aspect = aspect } }; quality = preset.quality } }
+                    Divider()
+                    ForEach(model.savedOutputPresets) { preset in Button(preset.name) { history.change { $0.aspect = preset.aspect }; quality = preset.quality; format = preset.format } }
+                    Button("Save current preset…") { presetName = "My export"; savingPreset = true }
+                }.font(.system(size: 11)).disabled(exporting)
+                Picker("Quality", selection: $quality) { ForEach(ExportQuality.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 150).disabled(exporting)
+                Picker("Format", selection: $format) { ForEach(VideoFormat.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 70).disabled(exporting)
+                ShareLink(item: library.fileURL(recording)) { Image(systemName: "square.and.arrow.up") }.buttonStyle(QuietButton()).help("Share original").disabled(exporting)
+            }
+            HStack(spacing: 12) {
+                Text("Edits save separately · Queue pauses during capture").font(.system(size: 10)).foregroundStyle(Color.muted)
+                Spacer()
+                if exporting { ProgressView(value: Double(progress)).frame(width: 110); Button("Cancel") { exportTask?.cancel() }.buttonStyle(QuietButton()) }
+                Button("Queue edited copy") { queueExport() }.buttonStyle(QuietButton()).disabled(exporting || model.phase.isActive)
+                Button { export() } label: { Label(exporting ? "Exporting…" : "Export edited copy", systemImage: "square.and.arrow.up") }.buttonStyle(PrimaryButton()).disabled(exporting || model.phase.isActive)
+            }
         }
     }
     private func cutBinding(_ id: UUID, isEnd: Bool) -> Binding<Double> {
@@ -334,12 +340,13 @@ struct TimelineEditor: View {
         catch { issue = error.localizedDescription }
     }
     private func export() {
-        player.pause(); exporting = true; progress = 0
+        player.pause(); exporting = true; model.editorExporting = true; progress = 0
         let document = history.document
         exportTask = Task {
+            await model.exports.waitUntilIdle()
             do { try await library.exportTimeline(recording, document: document, format: format, quality: quality) { value in Task { @MainActor in progress = value } } }
             catch { if !Task.isCancelled { issue = error.localizedDescription } }
-            exporting = false; exportTask = nil
+            exporting = false; model.editorExporting = false; exportTask = nil
         }
     }
 }

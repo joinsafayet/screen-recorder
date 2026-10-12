@@ -14,7 +14,7 @@ final class AppModel: ObservableObject {
             if oldValue.mode != settings.mode || oldValue.showCursor != settings.showCursor { schedulePreview() }
         }
     }
-    @Published var phase: CapturePhase = .idle { didSet { exports.setCaptureActive(phase.isActive) } }
+    @Published var phase: CapturePhase = .idle { didSet { exports.setCaptureActive(phase.isActive || editorExporting) } }
     let telemetry = RecordingTelemetry()
     let preparation = PreparationMonitor()
     @Published var preparingPreview = false
@@ -25,6 +25,10 @@ final class AppModel: ObservableObject {
     private let presentation = PresentationSession()
     private var presentationBounds = CGRect.zero
     private var presentationWindowID: CGWindowID?
+    private var captureDisplayID: CGDirectDisplayID?
+    private var activeDeviceIDs: Set<String> = []
+    private var deviceObservers: [NSObjectProtocol] = []
+    private var hiddenWindows: [NSWindow] = []
     var elapsed: Double { telemetry.elapsed }
     @Published var sessionTitle = ""
     @Published var librarySort: LibrarySort = .newest
@@ -65,6 +69,8 @@ final class AppModel: ObservableObject {
     @Published var favoritesOnly = false
     @Published var microphones: [AVCaptureDevice] = []
     @Published var cameras: [AVCaptureDevice] = []
+    @Published var accentChoice = UserDefaults.standard.string(forKey: "accentChoice") ?? "Blue" { didSet { UserDefaults.standard.set(accentChoice, forKey: "accentChoice") } }
+    @Published var editorExporting = false { didSet { exports.setCaptureActive(phase.isActive || editorExporting) } }
     @Published var theme: String = UserDefaults.standard.string(forKey: "theme") ?? "Dark" {
         didSet { UserDefaults.standard.set(theme, forKey: "theme") }
     }
@@ -102,11 +108,24 @@ final class AppModel: ObservableObject {
         savedOutputPresets = UserDefaults.standard.data(forKey: "outputPresets").flatMap { try? JSONDecoder().decode([SavedOutputPreset].self, from: $0) } ?? []
         savedRegions = UserDefaults.standard.data(forKey: "savedRegions").flatMap { try? JSONDecoder().decode([SavedRegion].self, from: $0) } ?? []
         configureHotkeys()
+        installDeviceObservers()
         refreshPermissions()
         if screenAccess && discoverSources { Task { await refreshSources() } }
         Task { let pending = await CaptureJournalStore.pending(in: self.library.folder); if !pending.isEmpty { self.library.notice = "\(pending.count) interrupted recording(s) found. Use Recover recordings in the library to restore completed fragments." } }
     }
 
+    private func installDeviceObservers() {
+        deviceObservers.append(NotificationCenter.default.addObserver(forName: AVCaptureDevice.wasDisconnectedNotification, object: nil, queue: .main) { [weak self] notification in
+            guard let device = notification.object as? AVCaptureDevice else { return }
+            Task { @MainActor in guard let self, self.phase.isCapturing, self.activeDeviceIDs.contains(device.uniqueID) else { return }; self.error = "\(device.localizedName) disconnected. Your recording is being saved."; await self.stopRecording() }
+        })
+        deviceObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in guard let self, self.phase.isCapturing, let id = self.captureDisplayID else { return }
+                let connected = NSScreen.screens.contains { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == id }
+                if !connected { self.error = "The captured display disconnected. Your recording is being saved."; await self.stopRecording() }
+            }
+        })
+    }
     var displayName: String {
         NSScreen.screens.first { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == displayID }?.localizedName ?? "Display"
     }
@@ -252,6 +271,10 @@ final class AppModel: ObservableObject {
             switch result {
             case .success(let filter):
                 self.settings.mode = filter.style == .window ? .window : .display
+                if #available(macOS 15.2, *) {
+                    if let display = filter.includedDisplays.first { self.displayID = display.displayID }
+                    if let window = filter.includedWindows.first { self.windowID = window.windowID }
+                }
                 self.pickedFilter = filter; self.region = nil
                 if #available(macOS 15.2, *) { self.pickedSourceName = filter.includedWindows.first?.title ?? filter.includedDisplays.first.map { "Display \($0.displayID)" } ?? "Selected source" }
                 self.schedulePreview()
@@ -305,6 +328,7 @@ final class AppModel: ObservableObject {
 
     func startRecording(testSeconds: Int = 0) {
         guard !phase.isActive, !library.isBusy else { return }
+        guard !editorExporting else { error = "Finish or cancel the edited export before starting a recording."; return }
         testTakeSeconds = testSeconds
         startupCaptureError = nil
         phase = .preparing
@@ -328,10 +352,15 @@ final class AppModel: ObservableObject {
                 let (filter, display, size) = try await makeFilter()
                 let options = settings
                 try PresentationSession.checkPermission(enabled: options.showKeystrokes)
+                activeDeviceIDs = []
+                if options.camera { if let device = cameras.first(where: { $0.uniqueID == options.cameraID }) ?? AVCaptureDevice.default(for: .video) { activeDeviceIDs.insert(device.uniqueID) } }
+                if options.microphone { if let device = microphones.first(where: { $0.uniqueID == options.microphoneID }) ?? AVCaptureDevice.default(for: .audio) { activeDeviceIDs.insert(device.uniqueID) } }
+                captureDisplayID = options.mode == .window ? nil : displayID
                 presentationWindowID = options.mode == .window ? selectedWindow?.windowID : nil
                 if #available(macOS 15.2, *), let pickedFilter, pickedFilter.style == .window { presentationWindowID = pickedFilter.includedWindows.first?.windowID }
                 if let window = selectedWindow, options.mode == .window { presentationBounds = window.frame }
                 else { presentationBounds = CGDisplayBounds(displayID) }
+                if #available(macOS 15.2, *), let window = pickedFilter?.includedWindows.first { presentationBounds = window.frame }
                 if options.mode == .region, let region { presentationBounds = RecordingMath.captureRect(selection: region, displayHeight: presentationBounds.height).offsetBy(dx: presentationBounds.minX, dy: presentationBounds.minY) }
                 let output = RecordingMath.outputSize(source: size, scale: Double(filter.pointPixelScale), maxHeight: options.quality.maxHeight)
                 let config = SCStreamConfiguration()
@@ -375,7 +404,8 @@ final class AppModel: ObservableObject {
                     guard self?.captureID == id else { return }; self?.telemetry.statistics = value
                 } }
                 engine = capture
-                if options.hideWindow || pickedFilter?.style == .display { mainWindow?.orderOut(nil) }
+                if pickedFilter?.style == .display { hiddenWindows = NSApp.windows.filter { $0.isVisible }; hiddenWindows.forEach { $0.orderOut(nil) } }
+                else if options.hideWindow { mainWindow?.orderOut(nil) }
                 try await capture.start(filter: filter, configuration: config, url: url, settings: options)
                 if let startupCaptureError { throw startupCaptureError }
                 accumulated = 0; telemetry.elapsed = 0; activeStart = ProcessInfo.processInfo.systemUptime; phase = .recording
@@ -388,7 +418,7 @@ final class AppModel: ObservableObject {
                 captureID = nil; _ = presentation.stop()
                 try? await engine?.stop(activeDuration: 0)
                 engine = nil; outputURL = nil; recordingSettings = nil
-                phase = .idle; self.error = error.localizedDescription; showMainWindow()
+                phase = .idle; self.error = error.localizedDescription; hiddenWindows.forEach { $0.orderFront(nil) }; hiddenWindows = []; showMainWindow()
             }
         }
     }
@@ -445,7 +475,8 @@ final class AppModel: ObservableObject {
         let presentationData = presentation.stop()
         telemetry.elapsed = activeDuration; phase = .saving; captureID = nil; activeStart = nil; timer?.invalidate(); timer = nil
         floatingPanel?.close(); floatingPanel = nil
-        diskCheckTask?.cancel()
+        diskCheckTask?.cancel(); activeDeviceIDs = []; captureDisplayID = nil
+        hiddenWindows.forEach { $0.orderFront(nil) }; hiddenWindows = []
         showMainWindow()
         do {
             telemetry.savingMessage = "Finalizing video…"

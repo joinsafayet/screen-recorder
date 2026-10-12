@@ -54,15 +54,20 @@ struct LibraryView: View {
                     } label: { Image(systemName: "ellipsis.circle").foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).fixedSize().disabled(library.isBusy || model.phase.isActive)
                 }
                 if selecting {
+                    VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         Text("\(selectedIDs.count) selected").font(.system(size: 11, weight: .semibold))
                         Button("All visible") { selectedIDs = Set(model.filteredRecordings.map(\.id)) }.buttonStyle(QuietButton())
                         Button("Organize") { projectName = ""; tagNames = ""; organizing = true }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty)
                         Button("Favorite") { model.report { try library.setFavorite(ids: selectedIDs, value: true) } }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty)
+                        Spacer()
+                    }
+                    HStack(spacing: 10) {
                         Picker("Output preset", selection: $batchPreset) { ForEach(OutputPreset.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 130)
                         Button("Export selected…") { batchExport() }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty || model.phase.isActive)
                         Spacer()
                         Button { trashingSelected = true } label: { Image(systemName: "trash") }.buttonStyle(QuietButton()).disabled(selectedIDs.isEmpty)
+                    }
                     }.card(padding: 12)
                 }
                 if let notice = library.notice {

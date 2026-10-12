@@ -4,13 +4,15 @@ struct PreferencesView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var library: LibraryStore
     var body: some View {
+        GeometryReader { geometry in
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 9) {
                     Text("Make yourself at home.").font(.system(size: 31, weight: .semibold)).tracking(-1.1)
                     Text("A workspace that works the way you do.").font(.system(size: 12)).foregroundStyle(Color.muted)
                 }.padding(.bottom, 3)
-                HStack(alignment: .top, spacing: 20) {
+                let cards = geometry.size.width < 800 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20)) : AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+                cards {
                     VStack(alignment: .leading, spacing: 20) {
                         SectionTitle(text: "Permissions")
                         permission(icon: "display", title: "Screen recording", detail: "Required to capture your screen and system audio.", granted: model.screenAccess) { Task { await model.requestScreenAccess() } }
@@ -38,14 +40,21 @@ struct PreferencesView: View {
                                 }.buttonStyle(InteractiveButton(radius: 10))
                             }
                         }
-                        Text("Graphite surfaces. Clear blue accents.").font(.system(size: 10)).foregroundStyle(Color.muted)
+                        Text("Graphite surfaces. Your choice of accent.").font(.system(size: 10)).foregroundStyle(Color.muted)
+                        HStack(spacing: 10) {
+                            ForEach(AccentPalette.allCases) { palette in
+                                Button { model.accentChoice = palette.rawValue } label: {
+                                    VStack(spacing: 6) { Circle().fill(Color.swatch(palette)).frame(width: 26, height: 26).overlay { if model.accentChoice == palette.rawValue { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.canvas) } }; Text(palette.rawValue).font(.system(size: 9)) }.padding(5).contentShape(Rectangle())
+                                }.buttonStyle(InteractiveButton(radius: 7)).accessibilityLabel("\(palette.rawValue) accent")
+                            }
+                        }
                         FeatureToggle(icon: "sparkles", title: "Interface motion", subtitle: "Smooth tabs and button feedback", value: $model.motionEnabled)
                         Text("Respects your Mac’s Reduce Motion setting.").font(.system(size: 10)).foregroundStyle(Color.muted)
                         Rectangle().fill(Color.line).frame(height: 1)
                         SectionTitle(text: "Capture behavior")
                         FeatureToggle(icon: "macwindow", title: "Hide main window", subtitle: "A clear workspace while recording", value: $model.settings.hideWindow)
                         FeatureToggle(icon: "rectangle.bottomthird.inset.filled", title: "Floating controls", subtitle: "Pause and stop from a small panel", value: $model.settings.showFloatingControls)
-                    }.frame(width: 285).card()
+                    }.frame(maxWidth: .infinity, alignment: .leading).card()
                 }
                 VStack(alignment: .leading, spacing: 18) {
                     SectionTitle(text: "Save location")
@@ -60,7 +69,7 @@ struct PreferencesView: View {
                     }
                     Text("Your existing recordings move with your library when you choose another folder.").font(.system(size: 10)).foregroundStyle(Color.muted)
                 }.card()
-                HStack(alignment: .top, spacing: 20) {
+                cards {
                     VStack(alignment: .leading, spacing: 18) {
                         SectionTitle(text: "Audio & camera devices")
                         Picker("Microphone", selection: $model.settings.microphoneID) {
@@ -87,6 +96,7 @@ struct PreferencesView: View {
                     }.frame(width: 285).card()
                 }
             }.padding(30)
+        }
         }
     }
     private func permission(icon: String, title: String, detail: String, granted: Bool, action: @escaping () -> Void) -> some View {

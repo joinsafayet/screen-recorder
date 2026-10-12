@@ -285,7 +285,7 @@ func unwrap<T>(_ value: T?) throws -> T {
         let suite = Verification()
         if CommandLine.arguments.contains("--interrupted-fixture") {
             let url = URL(fileURLWithPath: CommandLine.arguments.last!)
-            var settings = CaptureSettings(); settings.systemAudio = false; settings.format = .mov
+            var settings = CaptureSettings(); settings.systemAudio = false; settings.format = url.pathExtension == "mp4" ? .mp4 : .mov
             let writer = try RecordingWriter(url: url, size: (320, 180), settings: settings)
             for index in 0..<780 {
                 writer.consume(try suite.frame(at: 10 + Double(index) / 60), type: .screen)
@@ -324,7 +324,8 @@ func unwrap<T>(_ value: T?) throws -> T {
         ]
         for (name, test) in tests { try await test(); print("PASS: \(name)") }
         print("All \(tests.count) media checks passed.")
-        if CommandLine.arguments.contains("--live-benchmark") { try await suite.testAnimatedWindowCapture(); print("PASS: Native moving-window capture pipeline") }
+        if CommandLine.arguments.contains("--long-live-benchmark") { if try await suite.testAnimatedWindowCapture(seconds: 120) { print("PASS: Two-minute native moving-window capture") } }
+        if CommandLine.arguments.contains("--live-benchmark") { if try await suite.testAnimatedWindowCapture() { print("PASS: Native moving-window capture pipeline") } }
         if CommandLine.arguments.contains("--soak") { try await suite.benchmark(soak: true); print("PASS: Sustained 4K60 presenter and dual audio capture") }
         if CommandLine.arguments.contains("--benchmark") { try await suite.benchmark(); print("PASS: Four paced 60 fps profiles") }
         if CommandLine.arguments.contains("--capture-smoke") { try await suite.testLiveWindowCapture(); print("PASS: Live ScreenCaptureKit window recording, pause, and playback") }
