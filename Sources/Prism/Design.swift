@@ -172,13 +172,14 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @ViewState<Bool> private var sidebarVisible = true
     private var reduceMotion: Bool { systemReduceMotion || !model.motionEnabled }
     var body: some View {
-        HStack(spacing: 0) {
-            SidebarView().frame(width: 210)
-            Rectangle().fill(Color.line).frame(width: 1)
+        HSplitView {
+            if sidebarVisible { SidebarView().frame(minWidth: 180, idealWidth: 210, maxWidth: 260) }
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
+                    Button { sidebarVisible.toggle() } label: { Image(systemName: "sidebar.left") }.buttonStyle(InteractiveButton(radius: 5)).help("Toggle sidebar").keyboardShortcut("s", modifiers: [.command, .option])
                     Text("WORKSPACE").font(.system(size: 9, weight: .bold)).tracking(1.5).foregroundStyle(Color.muted)
                     Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(Color.muted.opacity(0.5))
                     Text(model.destination.rawValue).font(.system(size: 11, weight: .medium)).foregroundStyle(Color.ink)
@@ -199,7 +200,7 @@ struct RootView: View {
                 .animation(PrismMotion.page(reduceMotion), value: model.destination)
             }.background(Color.canvas)
         }
-        .frame(minWidth: 1080, minHeight: 740).foregroundStyle(Color.ink)
+        .frame(minWidth: sidebarVisible ? 940 : 760, minHeight: 680).foregroundStyle(Color.ink)
         .tint(.accent)
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
@@ -270,7 +271,7 @@ struct SidebarView: View {
                 Circle().fill(model.screenAccess ? Color.mint : Color.orange).frame(width: 6, height: 6)
                 Text(model.screenAccess ? "Ready for your next idea" : "Screen access needed").font(.system(size: 10)).foregroundStyle(Color.muted)
             }.padding(.horizontal, 5)
-            Text("PRISM  2.1").font(.system(size: 8, weight: .medium)).tracking(2).foregroundStyle(Color.muted.opacity(0.5)).padding(.horizontal, 5).padding(.top, 18)
+            Text("PRISM  3.0").font(.system(size: 8, weight: .medium)).tracking(2).foregroundStyle(Color.muted.opacity(0.5)).padding(.horizontal, 5).padding(.top, 18)
         }.padding(.horizontal, 18).padding(.top, 58).padding(.bottom, 24).background(Color.sidebar)
     }
     private func navItem(_ item: Destination) -> some View {

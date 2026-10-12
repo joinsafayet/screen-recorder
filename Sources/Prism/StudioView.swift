@@ -4,142 +4,139 @@ import ScreenCaptureKit
 struct StudioView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.prismReduceMotion) private var reduceMotion
-    @Namespace private var frameRate
+    @ViewState<Bool> private var inspectorVisible = true
     var body: some View {
-        VStack(spacing: 0) {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 9) {
-                        Text("Your recording studio.").font(.system(size: 31, weight: .semibold)).tracking(-1.1)
-                        Text("Make clear walkthroughs, polished demos, and your next great take.").font(.system(size: 12)).foregroundStyle(Color.muted)
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Recording studio").font(.system(size: 25, weight: .semibold)).tracking(-0.7)
+                        Text("Frame your idea. Make it yours.").font(.system(size: 11)).foregroundStyle(Color.muted)
                     }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 10) {
-                        Button { Task { await model.refreshSources() } } label: {
-                            Label(model.loadingSources ? "Refreshing…" : "Refresh sources", systemImage: "arrow.clockwise")
-                        }.buttonStyle(QuietButton()).disabled(model.loadingSources || model.phase.isActive)
-                        HStack(spacing: 8) {
-                            Image(systemName: "pencil.line").foregroundStyle(Color.muted)
-                            TextField("Name this recording…", text: $model.sessionTitle).textFieldStyle(.plain).font(.system(size: 11)).frame(width: 155).accessibilityLabel("Recording title")
-                        }.padding(9).background(Color.surface, in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.line)).disabled(model.phase.isActive)
+                    Spacer(minLength: 12)
+                    HStack(spacing: 8) {
+                        Image(systemName: "pencil.line").foregroundStyle(Color.muted)
+                        TextField("Name this recording…", text: $model.sessionTitle).textFieldStyle(.plain).font(.system(size: 12))
+                    }.padding(10).frame(width: 210).background(Color.surface, in: RoundedRectangle(cornerRadius: 9)).disabled(model.phase.isActive)
+                    Button { Task { await model.refreshSources() } } label: { Image(systemName: "arrow.clockwise").frame(width: 16, height: 16) }
+                        .buttonStyle(QuietButton()).disabled(model.loadingSources || model.phase.isActive).help("Refresh capture sources")
+                    Button { inspectorVisible.toggle() } label: { Image(systemName: "sidebar.right").frame(width: 16, height: 16) }
+                        .buttonStyle(QuietButton()).help("Show or hide recording inspector")
+                }.padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 16)
+                StudioPresets().disabled(model.phase.isActive).padding(.horizontal, 24).padding(.bottom, 16)
+                HSplitView {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            SectionTitle(text: "Capture source")
+                            CaptureModeSelector().disabled(model.phase.isActive)
+                            SourcePreview(height: min(420, max(240, geometry.size.height - 360)))
+                            CaptureSourcePicker().disabled(model.phase.isActive)
+                            Label("Prism and its controls stay outside your capture.", systemImage: "lock.shield")
+                                .font(.system(size: 10)).foregroundStyle(Color.muted)
+                            if model.phase.isCapturing || model.telemetry.statistics.frames > 0 { CaptureMonitor() }
+                        }.padding(18)
+                    }.frame(minWidth: 410, maxWidth: .infinity).background(Color.surface, in: RoundedRectangle(cornerRadius: 16))
+                    if inspectorVisible {
+                        RecordingInspector().frame(minWidth: 270, idealWidth: 300, maxWidth: 360)
                     }
-                }
-                StudioPresets().disabled(model.phase.isActive)
-                if model.phase.isCapturing || model.telemetry.statistics.frames > 0 { CaptureMonitor() }
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionTitle(text: "01  /  What are we capturing?")
-                    HStack(spacing: 12) {
-                        ForEach(CaptureMode.allCases) { mode in
-                            Button {
-                                model.settings.mode = mode
-                            } label: {
-                                HStack(spacing: 13) {
-                                    Image(systemName: mode.icon).font(.system(size: 22, weight: .light)).frame(width: 30)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(mode.rawValue).font(.system(size: 12, weight: .semibold))
-                                        Text(mode.detail).font(.system(size: 10)).foregroundStyle(Color.muted)
-                                    }
-                                    Spacer(minLength: 0)
-                                    AnimatedSymbol(name: model.settings.mode == mode ? "checkmark.circle.fill" : "circle").font(.system(size: 14)).foregroundStyle(model.settings.mode == mode ? Color.accent : Color.line)
-                                }.foregroundStyle(model.settings.mode == mode ? Color.accent : Color.ink)
-                                    .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                                    .selectionSurface(model.settings.mode == mode)
-                            }.buttonStyle(InteractiveButton())
-                        }
-                    }.disabled(model.phase.isActive)
-                }
-                HStack(alignment: .top, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        SourcePreview()
-                        CaptureSourcePicker().disabled(model.phase.isActive)
-                        HStack(spacing: 6) {
-                            Image(systemName: "info.circle").font(.system(size: 11))
-                            Text("Prism’s window and floating controls stay out of your capture.").font(.system(size: 10))
-                        }.foregroundStyle(Color.muted)
-                    }.frame(maxWidth: .infinity).card(padding: 18)
-                    VStack(alignment: .leading, spacing: 11) {
-                        HStack { SectionTitle(text: "02  /  Make it yours"); Spacer(); Image(systemName: "slider.horizontal.3").foregroundStyle(Color.muted).font(.system(size: 12)) }
-                        VStack(alignment: .leading, spacing: 9) {
-                            Text("Video quality").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.muted)
-                            Picker("Quality", selection: $model.settings.quality) {
-                                ForEach(Quality.allCases) { q in Text(q.description).tag(q) }
-                            }.labelsHidden().pickerStyle(.menu).frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        VStack(alignment: .leading, spacing: 9) {
-                            HStack { Text("Frame rate").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.muted); Spacer(); Text("fps").font(.system(size: 10)).foregroundStyle(Color.muted) }
-                            HStack(spacing: 5) {
-                                ForEach([24, 30, 60], id: \.self) { fps in
-                                    Button { model.settings.fps = fps } label: {
-                                        Text("\(fps)").font(.system(size: 12, weight: .semibold)).foregroundStyle(model.settings.fps == fps ? Color.accent : Color.muted)
-                                            .frame(maxWidth: .infinity).padding(.vertical, 9)
-                                            .background {
-                                                if model.settings.fps == fps {
-                                                    RoundedRectangle(cornerRadius: 7).fill(Color.accent.opacity(0.17))
-                                                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.accent.opacity(0.4)))
-                                                        .matchedGeometryEffect(id: "fps", in: frameRate)
-                                                }
-                                            }
-                                            .contentShape(RoundedRectangle(cornerRadius: 7))
-                                            .accessibilityLabel("\(fps) frames per second")
-                                            .accessibilityAddTraits(model.settings.fps == fps ? .isSelected : [])
-                                    }.buttonStyle(InteractiveButton(radius: 7))
-                                }
-                            }.padding(3).background(Color.canvas, in: RoundedRectangle(cornerRadius: 10))
-                                .animation(PrismMotion.selection(reduceMotion), value: model.settings.fps)
-                        }
-                        Rectangle().fill(Color.line).frame(height: 1)
-                        FeatureToggle(icon: "speaker.wave.2", title: "System audio", subtitle: "Sounds from your Mac", value: $model.settings.systemAudio)
-                        FeatureToggle(icon: "mic", title: "Microphone", subtitle: "Add your narration", value: $model.settings.microphone)
-                        FeatureToggle(icon: "person.crop.circle", title: "Camera bubble", subtitle: "Put a face to your story", value: $model.settings.camera)
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Codec").font(.system(size: 10)).foregroundStyle(Color.muted)
-                                Picker("Codec", selection: $model.settings.codec) { ForEach(VideoCodec.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 130)
-                            }
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Format").font(.system(size: 10)).foregroundStyle(Color.muted)
-                                Picker("File format", selection: $model.settings.format) { ForEach(VideoFormat.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 90)
-                            }
-                        }
-                    }.frame(width: 265).card(padding: 16).disabled(model.phase.isActive)
-                }
-                PresenterOptions().disabled(model.phase.isActive)
-                HStack(spacing: 20) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "timer").foregroundStyle(Color.accent)
-                        VStack(alignment: .leading, spacing: 3) { Text("A moment to get ready").font(.system(size: 11, weight: .semibold)); Text("Countdown before recording").font(.system(size: 10)).foregroundStyle(Color.muted) }
-                        Picker("Countdown", selection: $model.settings.countdown) { Text("None").tag(0); Text("3 sec").tag(3); Text("5 sec").tag(5); Text("10 sec").tag(10) }.labelsHidden().frame(width: 84)
-                    }
-                    Rectangle().fill(Color.line).frame(width: 1, height: 30)
-                    HStack(spacing: 10) {
-                        Image(systemName: "cursorarrow").foregroundStyle(Color.accent)
-                        Text("Show cursor").font(.system(size: 11, weight: .semibold))
-                        Toggle("Show cursor", isOn: $model.settings.showCursor).labelsHidden().toggleStyle(.switch).controlSize(.small)
-                    }
-                    Toggle("Click highlights", isOn: $model.settings.highlightClicks).toggleStyle(.switch).controlSize(.small).font(.system(size: 11))
-                    Spacer(minLength: 0)
-                    Menu {
-                        Picker("Auto stop", selection: $model.settings.stopAfterMinutes) {
-                            Text("Until I stop").tag(0); ForEach([1, 5, 10, 15, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) }
-                        }
-                    } label: { Label(model.settings.stopAfterMinutes == 0 ? "Auto stop" : "Stop at \(model.settings.stopAfterMinutes)m", systemImage: "stopwatch").font(.system(size: 11)).foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).fixedSize()
-                }.card(padding: 15).disabled(model.phase.isActive)
-                HStack(alignment: .top, spacing: 16) {
-                    Tip(icon: "command", title: "Stay in your flow", text: "⌃ ⌘ R to start or stop anywhere.\n⌃ ⌘ M to mark a moment.")
-                    Tip(icon: "scissors", title: "Keep the good parts", text: "Trim your clips and export a copy\nfrom your recording library.")
-                    Tip(icon: "lock.shield", title: "Made for your Mac", text: "No uploads. No subscriptions.\nYour recordings stay with you.")
-                }.padding(.top, 2)
-            }.padding(.horizontal, 30).padding(.vertical, 24)
-                .animation(PrismMotion.selection(reduceMotion), value: model.settings.camera)
-        }
-        Rectangle().fill(Color.line).frame(height: 1)
-        RecordDock().padding(.horizontal, 30).padding(.vertical, 15).background(Color.canvas)
+                }.padding(.horizontal, 24).padding(.bottom, 16)
+                Divider().overlay(Color.line)
+                RecordDock().padding(.horizontal, 24).padding(.vertical, 12)
+            }
         }
     }
 }
 
+struct CaptureModeSelector: View {
+    @EnvironmentObject private var model: AppModel
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(CaptureMode.allCases) { mode in
+                Button { model.settings.mode = mode } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: mode.icon).font(.system(size: 14))
+                        Text(mode.rawValue).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                    }.foregroundStyle(model.settings.mode == mode ? Color.accent : Color.muted)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12).selectionSurface(model.settings.mode == mode, radius: 9)
+                }.buttonStyle(InteractiveButton(radius: 9)).help(mode.detail)
+            }
+        }
+    }
+}
+
+struct RecordingInspector: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.prismReduceMotion) private var reduceMotion
+    @ViewState<Bool> private var videoExpanded = true
+    @ViewState<Bool> private var audioExpanded = true
+    @ViewState<Bool> private var cameraExpanded = true
+    @ViewState<Bool> private var behaviourExpanded = false
+    @Namespace private var frameRate
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack { SectionTitle(text: "Recording inspector"); Spacer(); Image(systemName: "slider.horizontal.3").foregroundStyle(Color.muted) }
+                DisclosureGroup("Video", isExpanded: $videoExpanded) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Picker("Quality", selection: $model.settings.quality) { ForEach(Quality.allCases) { Text($0.description).tag($0) } }.labelsHidden()
+                        HStack { Text("Frame rate").font(.system(size: 11)).foregroundStyle(Color.muted); Spacer(); Text("fps").font(.system(size: 10)).foregroundStyle(Color.muted) }
+                        HStack(spacing: 4) {
+                            ForEach([24, 30, 60], id: \.self) { fps in
+                                Button { model.settings.fps = fps } label: {
+                                    Text("\(fps)").font(.system(size: 12, weight: .semibold)).foregroundStyle(model.settings.fps == fps ? Color.accent : Color.muted)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                                        .background {
+                                            if model.settings.fps == fps { RoundedRectangle(cornerRadius: 7).fill(Color.accent.opacity(0.17)).matchedGeometryEffect(id: "fps", in: frameRate) }
+                                        }.contentShape(RoundedRectangle(cornerRadius: 7))
+                                }.buttonStyle(InteractiveButton(radius: 7)).accessibilityLabel("\(fps) frames per second")
+                            }
+                        }.padding(3).background(Color.canvas, in: RoundedRectangle(cornerRadius: 10)).animation(PrismMotion.selection(reduceMotion), value: model.settings.fps)
+                        Picker("Codec", selection: $model.settings.codec) { ForEach(VideoCodec.allCases) { Text($0.rawValue).tag($0) } }
+                        Picker("Format", selection: $model.settings.format) { ForEach(VideoFormat.allCases) { Text($0.rawValue).tag($0) } }
+                    }.padding(.top, 12)
+                }
+                Divider().overlay(Color.line)
+                DisclosureGroup("Audio", isExpanded: $audioExpanded) {
+                    VStack(spacing: 14) {
+                        FeatureToggle(icon: "speaker.wave.2", title: "System audio", subtitle: "Sounds from your Mac", value: $model.settings.systemAudio)
+                        FeatureToggle(icon: "mic", title: "Microphone", subtitle: "Your voice and narration", value: $model.settings.microphone)
+                        if model.settings.microphone {
+                            Picker("Microphone", selection: $model.settings.microphoneID) { Text("System default").tag(""); ForEach(model.microphones, id: \.uniqueID) { Text($0.localizedName).tag($0.uniqueID) } }.labelsHidden()
+                        }
+                    }.padding(.top, 12)
+                }
+                Divider().overlay(Color.line)
+                DisclosureGroup("Camera", isExpanded: $cameraExpanded) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        FeatureToggle(icon: "person.crop.circle", title: "Presenter bubble", subtitle: "Put a face to your story", value: $model.settings.camera)
+                        if model.settings.camera {
+                            Picker("Camera", selection: $model.settings.cameraID) { Text("System default").tag(""); ForEach(model.cameras, id: \.uniqueID) { Text($0.localizedName).tag($0.uniqueID) } }.labelsHidden()
+                            Picker("Position", selection: $model.settings.presenterCorner) { ForEach(PresenterCorner.allCases) { Text($0.rawValue).tag($0) } }
+                            HStack { Text("Size"); Slider(value: $model.settings.presenterSize, in: 0.12...0.4, step: 0.01); Text("\(Int(model.settings.presenterSize * 100))%").monospacedDigit() }.font(.system(size: 11))
+                            Toggle("Mirror camera", isOn: $model.settings.mirrorCamera).toggleStyle(.switch).controlSize(.small)
+                        }
+                    }.padding(.top, 12)
+                }
+                Divider().overlay(Color.line)
+                DisclosureGroup("Capture behaviour", isExpanded: $behaviourExpanded) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Picker("Countdown", selection: $model.settings.countdown) { Text("None").tag(0); ForEach([3, 5, 10], id: \.self) { Text("\($0) seconds").tag($0) } }
+                        Toggle("Show cursor", isOn: $model.settings.showCursor)
+                        Toggle("Click highlights", isOn: $model.settings.highlightClicks)
+                        Picker("Auto stop", selection: $model.settings.stopAfterMinutes) { Text("Until I stop").tag(0); ForEach([1, 5, 10, 15, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) } }
+                        Toggle("Hide main window", isOn: $model.settings.hideWindow)
+                        Toggle("Floating controls", isOn: $model.settings.showFloatingControls)
+                    }.padding(.top, 12).toggleStyle(.switch).controlSize(.small)
+                }
+            }.font(.system(size: 12, weight: .medium)).padding(18).disabled(model.phase.isActive)
+                .animation(PrismMotion.selection(reduceMotion), value: model.settings.camera)
+                .animation(PrismMotion.selection(reduceMotion), value: model.settings.microphone)
+        }.background(Color.surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
 struct SourcePreview: View {
+    var height: CGFloat = 249
     @EnvironmentObject private var model: AppModel
     @Environment(\.prismReduceMotion) private var reduceMotion
     var body: some View {
@@ -187,7 +184,7 @@ struct SourcePreview: View {
                     .contentTransition(.numericText(countsDown: true))
                     .animation(PrismMotion.selection(reduceMotion), value: seconds)
             }
-        }.frame(height: 249)
+        }.frame(height: height)
     }
 }
 
