@@ -45,6 +45,8 @@ final class RecordingWriter {
         statistics = CaptureStatistics(width: size.width, height: size.height, targetFPS: settings.fps)
         frameDuration = CMTime(value: 1, timescale: CMTimeScale(settings.fps))
         writer = try AVAssetWriter(outputURL: url, fileType: settings.format.fileType)
+        writer.movieFragmentInterval = CMTime(seconds: 10, preferredTimescale: 600)
+        writer.initialMovieFragmentInterval = CMTime(seconds: 10, preferredTimescale: 600)
         let useHEVC = settings.codec.resolved(for: settings.quality) == .hevc
         var compression: [String: Any] = [
             AVVideoAverageBitRateKey: Int(Double(size.width * size.height) * settings.quality.bitratePerPixel * Double(settings.fps) / 30),
@@ -81,6 +83,12 @@ final class RecordingWriter {
             writer.add(input)
         }
         guard writer.startWriting() else { throw writer.error ?? PrismError.message("Could not create the video file.") }
+    }
+
+    func checkpoint(activeDuration: Double) {
+        guard !ended, !paused, let screen = lastScreen, origin != nil, frameCount > 0,
+              activeDuration.isFinite, activeDuration - lastVideoTime.seconds >= 1 else { return }
+        appendFrame(screen, at: CMTime(seconds: activeDuration, preferredTimescale: 60000))
     }
 
     func setPaused(_ value: Bool, atTime time: CMTime = CMClockGetTime(CMClockGetHostTimeClock())) {
@@ -257,6 +265,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, AVCapture
         }
     }
 
+    func checkpoint(activeDuration: Double) { queue.async { self.recorder?.checkpoint(activeDuration: activeDuration) } }
     func pause(_ value: Bool) {
         let timestamp = CMClockGetTime(CMClockGetHostTimeClock())
         queue.async { self.recorder?.setPaused(value, atTime: timestamp) }

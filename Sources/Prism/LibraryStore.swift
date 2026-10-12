@@ -168,9 +168,22 @@ final class LibraryStore: ObservableObject {
             try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
                 .filter { ["mp4", "mov"].contains($0.pathExtension.lowercased()) }
         }.value
-        let known = Set(recordings.map(\.filename)); var recovered = 0
+        var known = Set(recordings.map(\.filename)); var recovered = 0
+        let pending = await CaptureJournalStore.pending(in: folder)
+        let recoveryStore = CaptureJournalStore(folder: folder)
+        for journal in pending {
+            if known.contains(journal.filename) { try? await recoveryStore.complete(journal.id); continue }
+            guard let url = journal.mediaURL(in: folder) else { continue }
+            do {
+                let asset = AVURLAsset(url: url); let duration = try await asset.load(.duration).seconds
+                let markers = journal.markers.filter { $0.time >= 0 && $0.time < duration }
+                try await add(url: url, source: journal.source, fps: journal.settings.fps,
+                    title: journal.title.isEmpty ? "Recovered recording" : journal.title + " — recovered", markers: markers)
+                try await recoveryStore.complete(journal.id); known.insert(journal.filename); recovered += 1
+            } catch { notice = "Some interrupted files have no readable fragment yet. They remain in your save folder." }
+        }
         for url in files where !known.contains(url.lastPathComponent) {
-            do { try await add(url: url, source: "Recovered", fps: 0); recovered += 1 }
+            do { try await add(url: url, source: "Recovered", fps: 0); known.insert(url.lastPathComponent); recovered += 1 }
             catch { notice = "Some interrupted files could not be read. They remain in your save folder." }
         }
         return recovered

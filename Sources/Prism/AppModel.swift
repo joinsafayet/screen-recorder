@@ -75,6 +75,9 @@ final class AppModel: ObservableObject {
     private var recordingSettings: CaptureSettings?
     private var captureSourceName = ""
     private var lastDiskCheck = 0.0
+    private var diskCheckTask: Task<Void, Never>?
+    private var journal: CaptureJournal?
+    private var journalStore: CaptureJournalStore?
     private var capturedTitle = ""
     private var previewRequest = UUID()
     private var previewTask: Task<Void, Never>?
@@ -90,6 +93,7 @@ final class AppModel: ObservableObject {
         configureHotkeys()
         refreshPermissions()
         if screenAccess && discoverSources { Task { await refreshSources() } }
+        Task { let pending = await CaptureJournalStore.pending(in: self.library.folder); if !pending.isEmpty { self.library.notice = "\(pending.count) interrupted recording(s) found. Use Recover recordings in the library to restore completed fragments." } }
     }
 
     var displayName: String {
@@ -332,6 +336,9 @@ final class AppModel: ObservableObject {
                 phase = .preparing
                 let url = try library.newURL(format: options.format)
                 outputURL = url; recordingSettings = options
+                let recovery = CaptureJournalStore(folder: library.folder)
+                let checkpoint = CaptureJournal(filename: url.lastPathComponent, title: capturedTitle, source: captureSourceName, settings: options)
+                try await recovery.begin(checkpoint); journalStore = recovery; journal = checkpoint
                 let capture = CaptureEngine()
                 let id = UUID(); captureID = id
                 capture.onError = { [weak self] error in Task { @MainActor in
@@ -372,11 +379,22 @@ final class AppModel: ObservableObject {
         let now = ProcessInfo.processInfo.systemUptime
         let current = accumulated + (activeStart.map { now - $0 } ?? 0)
         if Int(current) != Int(telemetry.elapsed) { telemetry.elapsed = current }
+        if phase == .recording { engine?.checkpoint(activeDuration: current) }
         if now - lastDiskCheck > 5 {
             lastDiskCheck = now
-            if let bytes = library.availableBytes, bytes < 150_000_000, phase.isCapturing {
-                error = "Recording stopped because the save disk is almost full."
-                Task { await stopRecording() }; return
+            if var checkpoint = journal {
+                checkpoint.activeDuration = current; checkpoint.markers = telemetry.markers
+                journal = checkpoint; journalStore?.checkpoint(checkpoint)
+            }
+            if diskCheckTask == nil, let id = captureID {
+                diskCheckTask = Task { [weak self] in
+                    guard let self else { return }
+                    defer { diskCheckTask = nil }
+                    let bytes = await library.availableCapacity()
+                    guard captureID == id, phase.isCapturing else { return }
+                    freeSpace = bytes
+                    if let bytes, bytes < 150_000_000 { error = "Recording stopped because the save disk is almost full."; await stopRecording() }
+                }
             }
         }
         if testTakeSeconds > 0, current >= Double(testTakeSeconds), phase.isCapturing { Task { await stopRecording() }; return }
@@ -395,6 +413,7 @@ final class AppModel: ObservableObject {
         guard phase.isCapturing else { return }
         telemetry.elapsed = activeDuration; phase = .saving; captureID = nil; activeStart = nil; timer?.invalidate(); timer = nil
         floatingPanel?.close(); floatingPanel = nil
+        diskCheckTask?.cancel()
         showMainWindow()
         do {
             telemetry.savingMessage = "Finalizing video…"
@@ -413,6 +432,7 @@ final class AppModel: ObservableObject {
                 telemetry.savingMessage = "Adding to your library…"
                 let recording = try await library.add(url: url, source: captureSourceName, fps: recordingSettings?.fps ?? 30,
                     title: capturedTitle.isEmpty ? nil : capturedTitle, markers: telemetry.markers)
+                if let journal { try await journalStore?.complete(journal.id) }; journal = nil; journalStore = nil
                 destination = .library; notify("Saved \(RecordingMath.clock(recording.duration)) of your best work.")
             }
         } catch {

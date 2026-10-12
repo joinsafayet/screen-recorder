@@ -235,7 +235,7 @@ struct Verification {
         print("Live capture saved to \(url.path)")
     }
 
-    private func frame(at seconds: Double) throws -> CMSampleBuffer {
+    func frame(at seconds: Double) throws -> CMSampleBuffer {
         var optionalPixel: CVPixelBuffer?
         expect(CVPixelBufferCreate(nil, 320, 180, kCVPixelFormatType_32BGRA, [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &optionalPixel) == kCVReturnSuccess)
         let pixel = try unwrap(optionalPixel)
@@ -283,6 +283,17 @@ func unwrap<T>(_ value: T?) throws -> T {
     static func main() async throws {
         setvbuf(stdout, nil, _IONBF, 0)
         let suite = Verification()
+        if CommandLine.arguments.contains("--interrupted-fixture") {
+            let url = URL(fileURLWithPath: CommandLine.arguments.last!)
+            var settings = CaptureSettings(); settings.systemAudio = false; settings.format = .mov
+            let writer = try RecordingWriter(url: url, size: (320, 180), settings: settings)
+            for index in 0..<780 {
+                writer.consume(try suite.frame(at: 10 + Double(index) / 60), type: .screen)
+                try await Task.sleep(for: .milliseconds(3))
+            }
+            try await Task.sleep(for: .milliseconds(300))
+            _exit(0)
+        }
         let tests: [(String, () async throws -> Void)] = [
             ("Library persistence, markers, recovery, and failed writes", { try await suite.testLibraryPersistenceRecoveryAndFailedWrites() }),
             ("Settings migration and bounds", { try suite.testSettingsMigrationAndClamping() }),
@@ -296,6 +307,8 @@ func unwrap<T>(_ value: T?) throws -> T {
             ("Adjustable regions and saved area persistence", { try suite.testAdjustableRegionsAndSavedAreas() }),
             ("Preset selection and effective codec", { suite.testPresetSelectionUsesEffectiveCodecAndPreservesOtherOptions() }),
             ("Preparation output estimates and audio activity", { suite.testPreparationEstimatesAndAudioMeter() }),
+            ("Recovery journal ordering and path validation", { try await suite.testRecoveryJournalOrderingAndPathValidation() }),
+            ("Interrupted fragment playback and restoration", { try await suite.testInterruptedFragmentIsPlayableAndRecoverable() }),
             ("Duration formatting", { suite.testClockHandlesLongAndNegativeDurations() }),
             ("Pause removal and static-screen tail", { try await suite.testVideoWriterRemovesPauseAndRetainsStaticTail() }),
             ("Empty recording failure", { try await suite.testEmptyWriterReportsFailureInsteadOfSavingBrokenVideo() }),

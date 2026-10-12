@@ -44,7 +44,7 @@ enum AudioActivity {
 }
 
 /// Device capture and image conversion stay off the UI thread. Published previews are bounded to 2 fps.
-final class PreparationMonitor: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, SCStreamOutput, SCStreamDelegate {
+final class PreparationMonitor: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
     @Published private(set) var running = false
     @Published private(set) var cameraImage: NSImage?
     @Published private(set) var screenImage: NSImage?

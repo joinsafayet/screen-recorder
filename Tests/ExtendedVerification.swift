@@ -32,3 +32,51 @@ extension Verification {
         expect(AudioActivity.rms([1, -1]) == 1)
     }
 }
+
+extension Verification {
+    func testRecoveryJournalOrderingAndPathValidation() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("prism-journal-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = CaptureJournalStore(folder: folder)
+        var journal = CaptureJournal(filename: "take.mov", title: "My take", source: "Window", settings: CaptureSettings())
+        try await store.begin(journal)
+        let pending = await CaptureJournalStore.pending(in: folder)
+        expect(pending.count == 1 && pending[0].title == "My take")
+        journal.activeDuration = 42; store.checkpoint(journal)
+        try await store.complete(journal.id)
+        store.checkpoint(journal)
+        try await Task.sleep(for: .milliseconds(30))
+        let remaining = await CaptureJournalStore.pending(in: folder)
+        expect(remaining.isEmpty)
+        let invalid = CaptureJournal(filename: "../outside.mov", title: "Unsafe", source: "Window", settings: CaptureSettings())
+        expect(invalid.mediaURL(in: folder) == nil)
+        do { try await store.begin(invalid); expect(false, "Reject journal traversal") } catch {}
+    }
+    @MainActor func testInterruptedFragmentIsPlayableAndRecoverable() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("prism-interrupted-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("interrupted.mov")
+        let process = Process(); process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
+        process.arguments = ["--interrupted-fixture", url.path]
+        process.standardOutput = Pipe(); process.standardError = Pipe(); try process.run()
+        await Task.detached { process.waitUntilExit() }.value
+        expect(process.terminationStatus == 0)
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration).seconds
+        expect(duration > 8 && duration < 14, "A completed fragment must survive without finishWriting")
+        let generator = AVAssetImageGenerator(asset: asset)
+        let image = try await generator.image(at: CMTime(seconds: 1, preferredTimescale: 600)).image
+        expect(image.width == 320)
+        var settings = CaptureSettings(); settings.format = .mov
+        let journal = CaptureJournal(filename: url.lastPathComponent, title: "Important demo", source: "Test window", settings: settings,
+            activeDuration: 13, markers: [RecordingMarker(time: 1, title: "Kept"), RecordingMarker(time: 100, title: "Outside")])
+        try await CaptureJournalStore(folder: folder).begin(journal)
+        let library = LibraryStore(folder: folder, support: folder.appendingPathComponent("Index"))
+        let count = try await library.recoverRecordings()
+        expect(count == 1 && library.recordings[0].title == "Important demo — recovered")
+        expect(library.recordings[0].markers?.count == 1)
+        let remaining = await CaptureJournalStore.pending(in: folder)
+        expect(remaining.isEmpty)
+    }
+}
